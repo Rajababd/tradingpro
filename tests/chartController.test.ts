@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => {
   const chart = {
     addSeries: vi.fn((..._args: unknown[]) => series),
     timeScale: vi.fn(() => timeScale),
+    subscribeClick: vi.fn(),
+    unsubscribeClick: vi.fn(),
     remove: vi.fn(),
   };
   return { series, timeScale, chart, createChart: vi.fn(() => chart) };

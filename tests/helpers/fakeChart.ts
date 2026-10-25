@@ -39,6 +39,7 @@ export class FakeChart {
   visibleRange: { from: number; to: number } | null = null;
 
   crosshairHandlers = new Set<Handler>();
+  clickHandlers = new Set<Handler>();
   rangeHandlers = new Set<Handler>();
 
   fitContent = vi.fn();
@@ -110,6 +111,8 @@ export class FakeChart {
 
   subscribeCrosshairMove = vi.fn((h: Handler) => void this.crosshairHandlers.add(h));
   unsubscribeCrosshairMove = vi.fn((h: Handler) => void this.crosshairHandlers.delete(h));
+  subscribeClick = vi.fn((h: Handler) => void this.clickHandlers.add(h));
+  unsubscribeClick = vi.fn((h: Handler) => void this.clickHandlers.delete(h));
 
   readonly #timeScale = {
     fitContent: this.fitContent,

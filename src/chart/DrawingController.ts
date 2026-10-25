@@ -61,17 +61,17 @@ export class DrawingController {
     this.#container = container;
     this.#manager.attach(
       chart,
-      this.#series.get<SeriesType>('price') ?? null,
+      this.series.get<SeriesType>('price') ?? null,
       container,
       (api) => this.#idForSeries(api),
-      (id) => this.#series.get<SeriesType>(id),
+      (id) => this.series.get<SeriesType>(id),
     );
   }
 
   /** Create and register a drawing on an existing series. Anchors may be empty for interactive tools. */
   create(type: string, id: string, seriesId = 'price', anchors: DrawingJSON['anchors'] = []): DrawingInstance {
     this.#assertAttached();
-    const api = this.#series.get<SeriesType>(seriesId);
+    const api = this.series.get<SeriesType>(seriesId);
     if (!api) throw new Error(`Cannot create drawing: unknown series "${seriesId}".`);
     const drawing = this.#registry.createDrawing(type, id, anchors, {}, {});
     if (!drawing) throw new Error(`Unknown drawing tool "${type}".`);
@@ -100,8 +100,8 @@ export class DrawingController {
         drawing?.fromJSON(item);
         return drawing;
       },
-      (paneIndex) => this.#series.list().map(({ id }) => this.#series.get<SeriesType>(id)).find((api) => api?.getPane().paneIndex() === paneIndex),
-      (seriesId) => this.#series.get<SeriesType>(seriesId),
+      (paneIndex) => this.series.list().map(({ id }) => this.series.get<SeriesType>(id)).find((api) => api?.getPane().paneIndex() === paneIndex),
+      (seriesId) => this.series.get<SeriesType>(seriesId),
     );
   }
 
@@ -111,7 +111,7 @@ export class DrawingController {
     for (const drawing of this.#manager.getAllDrawings()) {
       if (drawing.isAttached()) continue;
       const id = drawing.seriesId;
-      const api = id ? this.#series.get<SeriesType>(id) : this.#series.get<SeriesType>('price');
+      const api = id ? this.series.get<SeriesType>(id) : this.series.get<SeriesType>('price');
       if (api) drawing.attach(api, this.#chart, this.#container);
     }
   }
@@ -126,7 +126,7 @@ export class DrawingController {
   }
 
   #idForSeries(api: ISeriesApi<SeriesType>): string | undefined {
-    return this.#series.list().find(({ id }) => this.#series.get<SeriesType>(id) === api)?.id;
+    return this.series.list().find(({ id }) => this.series.get<SeriesType>(id) === api)?.id;
   }
 
   #assertAttached(): void {
