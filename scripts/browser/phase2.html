@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Real-library harness for Phase 2. Drives the actual ChartController in a browser;
+     scripts/verify-phase2.py loads this page and asserts on window.__tp. Not part of the app build. -->
+<html><head><meta charset="utf-8" /></head>
+<body style="margin:0;background:#10151c">
+<div id="c" style="width:600px;height:700px"></div>
+<script type="module">
+import { HistogramSeries, LineSeries } from 'lightweight-charts';
+import { ChartController } from '/src/chart/ChartController.ts';
+import { theme } from '/src/app/theme.ts';
+import { generateFixtureCandles } from '/src/data/FixtureProvider.ts';
+import { normalizeCandles } from '/src/data/validator.ts';
+
+let controller = new ChartController(theme);
+controller.mount(document.getElementById('c'));
+const report = normalizeCandles(generateFixtureCandles(120));
+controller.setCandles(report.candles);
+
+const T = (i) => report.candles[i].time;
+const lineData = (base) => report.candles.map((c, i) => ({ time: c.time, value: base + Math.sin(i / 5) }));
+const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+/** What the real library reports for every managed series, next to what the manager expects. */
+const layout = () => controller.series.list().map((s) => ({
+  id: s.id, paneId: s.paneId, visible: s.visible,
+  lwIndex: controller.series.get(s.id).getPane().paneIndex(),
+  expectedIndex: controller.panes.indexFor(s.paneId),
+  seriesInLwPane: controller.series.get(s.id).getPane().getSeries().length,
+}));
+const priceEl = () => controller.series.get('price').getPane().getHTMLElement();
+const domInfo = () => { const el = priceEl(); return { tag: el.tagName, parentTag: el.parentElement.tagName, parentChildren: el.parentElement.children.length,
+  siblingTags: [...el.parentElement.children].map((c) => c.tagName + '.' + (c.className || '')) }; };
+
+const paneCount = () => priceEl().parentElement.children.length / 2; // panes + separators + time axis = 2n rows
+const addLine = (id, paneId, base = 10) => { const s = controller.visibility.addSeries({ id, definition: LineSeries, paneId }); s.setData(lineData(base)); return s; };
+const addHist = (id, paneId) => { const s = controller.visibility.addSeries({ id, definition: HistogramSeries, paneId }); s.setData(report.candles.map((c) => ({ time: c.time, value: c.volume ?? 0 }))); return s; };
+
+window.__tp = { controller, report, T, lineData, frame, layout, domInfo, paneCount, addLine, addHist, LineSeries, HistogramSeries, ChartController, theme };
+await frame();
+window.__ready = true;
+</script></body></html>

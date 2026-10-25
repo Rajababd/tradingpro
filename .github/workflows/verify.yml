@@ -1,0 +1,69 @@
+name: TradingPro verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Test drawing library
+        run: npm run test:drawing
+
+      - name: Run project tests
+        run: npm test
+
+      - name: Type-check TypeScript
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Set up Python for browser test
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: python -m pip install playwright
+
+      - name: Install Chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Start Vite development server
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/tradingpro-vite.log 2>&1 &
+          echo $! > /tmp/tradingpro-vite.pid
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:5173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/tradingpro-vite.log
+          exit 1
+
+      - name: Verify drawing interactions on desktop and phone viewport
+        run: python scripts/verify-drawing-app.py
+
+      - name: Show Vite logs if browser test failed
+        if: failure()
+        run: cat /tmp/tradingpro-vite.log || true

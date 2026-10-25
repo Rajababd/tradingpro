@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- Real-library harness for Phase 5: the actual ChartController and its visibility controller, with generic
+     line/histogram series standing in for indicators. Not part of the app build. -->
+<html><head><meta charset="utf-8" /></head>
+<body style="margin:0;background:#10151c">
+<div id="c" style="width:700px;height:640px"></div>
+<script type="module">
+import { HistogramSeries, LineSeries } from 'lightweight-charts';
+import { ChartController } from '/src/chart/ChartController.ts';
+import { theme } from '/src/app/theme.ts';
+import { generateFixtureCandles } from '/src/data/FixtureProvider.ts';
+import { normalizeCandles } from '/src/data/validator.ts';
+
+const controller = new ChartController(theme);
+controller.mount(document.getElementById('c'));
+const { candles } = normalizeCandles(generateFixtureCandles(150));
+controller.setCandles(candles);
+const vc = controller.visibility;
+
+['volume', 'rsi', 'macd', 'obv'].forEach((p) => controller.panes.register(p)); // the logical pane order
+const lineData = (base) => candles.map((c, i) => ({ time: c.time, value: base + Math.sin(i / 6) * 5 }));
+const addLine = (id, paneId, base, visible) => { const s = vc.addSeries({ id, definition: LineSeries, paneId, ...(visible === undefined ? {} : { visible }) }); s.setData(lineData(base)); return s; };
+const addHist = (id, paneId, visible) => { const s = vc.addSeries({ id, definition: HistogramSeries, paneId, ...(visible === undefined ? {} : { visible }) }); s.setData(candles.map((c) => ({ time: c.time, value: c.volume ?? 0 }))); return s; };
+
+const table = () => document.querySelector('#c table');
+/** pane heights in px, from the DOM (rows are pane, separator, pane, separator, ..., time axis) */
+// n panes => 2n rows: panes sit at the even indices; the odd ones are separators and, last, the time axis.
+const heights = () => [...table().rows].filter((_, i) => i % 2 === 0).map((r) => Math.round(r.getBoundingClientRect().height));
+const separators = () => [...table().rows].filter((_, i) => i % 2 === 1).slice(0, -1);
+const paneCount = () => heights().length;
+const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+const FIRST = { price: 'price', volume: 'vol', rsi: 'rsi', macd: 'macd', obv: 'obv-line' };
+const paneHandle = (paneId) => controller.series.get(FIRST[paneId]).getPane();
+const stretch = () => controller.panes.order.filter((p) => controller.panes.isMaterialized(p)).map((p) => paneHandle(p).getStretchFactor());
+const lwIndex = (id) => controller.series.get(id).getPane().paneIndex();
+const seriesCountInLibrary = () => controller.series.list().reduce((n, s) => n + 1, 0) ;
+const libraryPaneSeriesTotal = () => { let n = 0; for (const p of controller.panes.order) if (controller.panes.isMaterialized(p)) n += paneHandle(p).getSeries().length; return n; };
+
+addHist('vol', 'volume');
+addLine('rsi', 'rsi', 50); addLine('rsi-sma', 'rsi', 50);
+addLine('macd', 'macd', 0); addLine('signal', 'macd', 1); addLine('hist', 'macd', 2);
+await frame();
+window.__v = { controller, vc, candles, addLine, addHist, heights, separators, paneCount, stretch, frame, lwIndex, libraryPaneSeriesTotal, paneHandle,
+  roots: () => document.querySelectorAll('.tv-lightweight-charts').length };
+window.__ready = true;
+</script></body></html>

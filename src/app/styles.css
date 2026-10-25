@@ -1,0 +1,426 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--c-ink);
+  color: var(--c-text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  overscroll-behavior: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0)
+    env(safe-area-inset-left, 0);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-rule);
+}
+
+.brand {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.symbol {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeframe,
+.status {
+  color: var(--c-muted);
+}
+
+.status {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-simulated {
+  padding: 1px 8px;
+  border: 1px solid var(--c-warn);
+  border-radius: 999px;
+  color: var(--c-warn);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.chart {
+  position: absolute;
+  inset: 0;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: color-mix(in srgb, var(--c-ink) 88%, transparent);
+  text-align: center;
+}
+
+.overlay p {
+  margin: 0;
+  max-width: 36ch;
+  color: var(--c-danger);
+}
+
+.overlay button {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--c-accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.overlay button:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.legend {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 2;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none; /* never intercept chart gestures */
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-muted);
+  text-shadow: 0 0 4px var(--c-ink);
+}
+
+.status[data-tone='warn'] {
+  color: var(--c-warn);
+}
+
+/* ---- top bar menus (Indicators, SMA) ---------------------------------------------------------- */
+
+.menu-trigger {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--c-rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.menu-trigger:hover,
+.menu-trigger[aria-expanded='true'] {
+  border-color: var(--c-accent);
+}
+
+.menu-trigger:focus-visible,
+.icon-button:focus-visible,
+.switch-row input:focus-visible + .switch,
+.field input:focus-visible,
+.chip input:focus-visible + span {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.menu-panel {
+  position: fixed;
+  z-index: 20;
+  overflow-y: auto;
+  overscroll-behavior: contain; /* scrolling the menu never scrolls or pans anything behind it */
+  padding: 4px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-rule);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.menu-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-row {
+  border-radius: 8px;
+}
+
+.menu-row[data-displayed='true'] {
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.row-line {
+  display: flex;
+  align-items: center;
+}
+
+.switch-row {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 8px 0 12px;
+  cursor: pointer;
+}
+
+/* the real checkbox covers the whole row, so the whole row is the touch target */
+.switch-row input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--c-rule);
+  transition: background 0.12s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c-text);
+  transition: transform 0.12s;
+}
+
+.switch-row input:checked + .switch {
+  background: var(--c-accent);
+}
+
+.switch-row input:checked + .switch::after {
+  transform: translateX(16px);
+  background: var(--c-ink);
+}
+
+.row-name .note {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.icon-button {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.icon-button[aria-expanded='true'] {
+  color: var(--c-accent);
+}
+
+.settings {
+  padding: 0 8px 8px 12px;
+}
+
+.settings.inline {
+  padding-top: 0;
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 2px 0 4px;
+}
+
+.field label {
+  min-width: 7.5em;
+  color: var(--c-muted);
+}
+
+.field input {
+  width: 5.5em;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--c-rule);
+  border-radius: 8px;
+  background: var(--c-ink);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 16px; /* 16px stops mobile browsers zooming the page when the field is focused */
+  font-variant-numeric: tabular-nums;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--c-danger);
+}
+
+.hint {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.error {
+  flex-basis: 100%;
+  color: var(--c-danger);
+  font-size: 12px;
+}
+
+.outputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+}
+
+.outputs legend {
+  padding: 0 0 4px;
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.chip {
+  position: relative;
+  display: inline-flex;
+}
+
+.chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.chip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--c-rule);
+  border-radius: 999px;
+  color: var(--c-muted);
+}
+
+.chip input:checked + span {
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+
+.menu-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 0 0 12px;
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-rule);
+  color: var(--c-muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---- drawing tools --------------------------------------------------------------------------- */
+
+.drawing-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--c-rule);
+}
+
+.drawing-toolbar-label {
+  padding: 0 4px;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drawing-tool-button {
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--c-rule);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.drawing-tool-button:hover,
+.drawing-tool-button[aria-pressed='true'] {
+  border-color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+}
+
+.drawing-tool-button:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.drawing-tool-cancel {
+  color: var(--c-warn);
+}

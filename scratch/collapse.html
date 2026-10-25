@@ -1,0 +1,37 @@
+<!doctype html><html><body style="margin:0;background:#10151c"><div id="c" style="width:640px;height:640px"></div>
+<script type="module">
+import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts';
+const T0 = 1704067200, DAY = 86400;
+const line = (b) => Array.from({length:80},(_,i)=>({time:T0+i*DAY, value: b+Math.sin(i/4)*3}));
+const out = {}; const step = (n, f) => { try { out[n] = f(); } catch (e) { out[n] = 'THREW: ' + e.message; } };
+const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+const chart = createChart(document.getElementById('c'), {width:640,height:640,localization:{locale:'en-US'}, layout:{background:{color:'#10151c'},textColor:'#9aa'}});
+const price = chart.addSeries(CandlestickSeries,{},0); price.setData(Array.from({length:80},(_,i)=>({time:T0+i*DAY,open:100,high:104,low:96,close:100+Math.sin(i/4)*3})));
+const a = chart.addSeries(LineSeries,{color:'#7aa7ff'},1); a.setData(line(50));
+const b = chart.addSeries(LineSeries,{color:'#f2c14e'},2); b.setData(line(20));
+await frame();
+const rows = () => { const t = document.querySelector('#c table'); return [...t.rows].map(r => Math.round(r.getBoundingClientRect().height)); };
+const heights = () => chart.panes().map(p => Math.round(p.getHeight()));
+const stretch = () => chart.panes().map(p => p.getStretchFactor());
+out.initial = { heights: heights(), rows: rows(), stretch: stretch() };
+
+window.__shots = {};
+step('stretch_0', () => { chart.panes()[1].setStretchFactor(0); return 'ok'; });
+await frame(); out.stretch_0 = { heights: heights(), rows: rows(), stretch: stretch() };
+step('stretch_0.01', () => { chart.panes()[1].setStretchFactor(0.01); return 'ok'; });
+await frame(); out.stretch_0_01 = { heights: heights(), rows: rows(), stretch: stretch() };
+step('setHeight_0', () => { chart.panes()[1].setHeight(0); return 'ok'; });
+await frame(); out.setHeight_0 = { heights: heights(), rows: rows(), stretch: stretch() };
+step('restore_stretch_1', () => { chart.panes()[1].setStretchFactor(1); return 'ok'; });
+await frame(); out.restored = { heights: heights(), rows: rows(), stretch: stretch() };
+
+// both indicator panes collapsed: how much of the chart does the price pane get?
+chart.panes()[1].setStretchFactor(0); chart.panes()[2].setStretchFactor(0); await frame();
+out.both_collapsed_0 = { heights: heights(), rows: rows(), stretch: stretch() };
+chart.panes()[1].setStretchFactor(0.01); chart.panes()[2].setStretchFactor(0.01); await frame();
+out.both_collapsed_0_01 = { heights: heights(), rows: rows(), stretch: stretch() };
+
+// separators: how many extra rows are there and how tall
+out.rowsDetail = [...document.querySelector('#c table').rows].map(r => ({ h: Math.round(r.getBoundingClientRect().height), cells: r.cells.length, cls: r.className, disp: getComputedStyle(r).display }));
+window.__out = out; window.__ready = true;
+</script></body></html>

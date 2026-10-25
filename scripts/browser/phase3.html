@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Real-library harness for Phase 3: the actual ChartController + MarketDataService + bindChartToService,
+     with a provider whose failures the test script can switch on. Not part of the app build. -->
+<html><head><meta charset="utf-8" /></head>
+<body style="margin:0;background:#10151c">
+<div id="c" style="width:700px;height:600px"></div>
+<script type="module">
+import { ChartController } from '/src/chart/ChartController.ts';
+import { MarketDataService } from '/src/data/MarketDataService.ts';
+import { FixtureProvider } from '/src/data/FixtureProvider.ts';
+import { bindChartToService } from '/src/app/bindChartToService.ts';
+import { theme } from '/src/app/theme.ts';
+
+const fixture = new FixtureProvider(42, 500);
+const knobs = { down: false, garbage: false, latestCalls: 0, historicalCalls: 0 };
+const provider = {
+  id: fixture.id, displayName: fixture.displayName, isSimulated: true,
+  fetchHistorical: (r) => { knobs.historicalCalls++; return fixture.fetchHistorical(r); },
+  fetchLatest: async (r) => {
+    knobs.latestCalls++;
+    if (knobs.down) throw new Error('connection reset');
+    if (knobs.garbage) return [{ time: 'x' }, null];
+    return fixture.fetchLatest(r);
+  },
+};
+
+const chart = new ChartController(theme);
+chart.mount(document.getElementById('c'));
+const price = chart.series.get('price');
+const counts = { setData: 0, update: 0 };
+const origSet = price.setData.bind(price), origUpdate = price.update.bind(price);
+price.setData = (...a) => { counts.setData++; return origSet(...a); };
+price.update = (...a) => { counts.update++; return origUpdate(...a); };
+
+const service = new MarketDataService(provider, { olderPageSize: 100, olderRetryCooldownMs: 300 });
+bindChartToService(chart, service, { loadOlderWithinBars: 20 });
+
+window.__last = null;
+chart.crosshair.subscribe((s) => { window.__last = s; });
+
+const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+const consistency = () => {
+  const d = price.data(), s = service.candles, times = d.map((x) => x.time);
+  const same = (a, b) => a && b && a.time === b.time && a.open === b.open && a.high === b.high && a.low === b.low && a.close === b.close;
+  return { chartLen: d.length, storeLen: s.length, ascending: times.every((t, i) => i === 0 || t > times[i - 1]),
+           lastEqual: same(d.at(-1), s.at(-1)), allEqual: d.length === s.length && d.every((x, i) => same(x, s[i])) };
+};
+const state = () => { const s = service.getState(); return { status: s.status, count: s.candleCount, live: s.live && { connection: s.live.connection, failures: s.live.consecutiveFailures, error: s.live.lastError },
+  history: s.history, stats: s.stats, error: s.error }; };
+
+await service.load({ symbol: 'SIM', timeframe: '1D', limit: 300 });
+await frame();
+window.__md = { chart, service, price, knobs, counts, frame, consistency, state, chartRoots: () => document.querySelectorAll('.tv-lightweight-charts').length };
+window.__ready = true;
+</script></body></html>
