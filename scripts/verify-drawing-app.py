@@ -29,6 +29,20 @@ with sync_playwright() as p:
         check(f"{mode}: trend-line tool activates", button.get_attribute("aria-pressed") == "true")
 
         box = page.locator('[data-testid="chart"]').bounding_box()
+        page.locator('[data-testid="chart"]').evaluate("""el => {
+            window.__drawingDebugEvents = [];
+            for (const type of ["pointerdown", "pointerup", "click"]) {
+                el.addEventListener(type, event => {
+                    window.__drawingDebugEvents.push({
+                        type,
+                        x: event.clientX,
+                        y: event.clientY,
+                        target: event.target?.tagName ?? null,
+                        className: String(event.target?.className ?? "")
+                    });
+                }, true);
+            }
+        }""")
         # Keep both points well inside the plotting region, away from the scales and time axis.
         p1 = (box["x"] + box["width"] * 0.42, box["y"] + box["height"] * 0.38)
         p2 = (box["x"] + box["width"] * 0.68, box["y"] + box["height"] * 0.62)
@@ -41,7 +55,25 @@ with sync_playwright() as p:
             check(f"{mode}: first tap does not commit a two-anchor drawing", len(export_drawings()) == 0)
             page.touchscreen.tap(*p2)
 
-        page.wait_for_function("window.__tradingpro.chart.drawings.export().length === 1", timeout=4000)
+        try:
+            page.wait_for_function(
+                "window.__tradingpro.chart.drawings.export().length === 1",
+                timeout=4000,
+            )
+        except Exception:
+            print(f"DEBUG {mode}: chartBox={box}")
+            print(f"DEBUG {mode}: p1={p1}, p2={p2}")
+            print(f"DEBUG {mode}: drawings={export_drawings()}")
+            print(
+                f"DEBUG {mode}: activeTool="
+                f"{page.evaluate('window.__tradingpro.chart.drawings.activeTool')}"
+            )
+            print(
+                f"DEBUG {mode}: DOM pointer/click events="
+                f"{page.evaluate('window.__drawingDebugEvents')}"
+            )
+            print(f"DEBUG {mode}: pageErrors={errors}")
+            raise
         drawings = export_drawings()
         check(f"{mode}: second click/tap commits drawing", len(drawings) == 1)
         if drawings:
