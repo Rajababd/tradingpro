@@ -15,7 +15,7 @@ function makeSeries(id, paneIndex = 0) {
   const series = {
     id,
     attached: new Set(),
-    getPane: () => ({ paneIndex: () => paneIndex }),
+    getPane: () => ({ paneIndex: () => paneIndex, getHeight: () => 600 }),
     attachPrimitive(p) {
       this.attached.add(p);
       p.attached?.({ chart, series: this, requestUpdate() {} });
@@ -31,9 +31,6 @@ function makeSeries(id, paneIndex = 0) {
   return series;
 }
 const chart = {
-  clicks: new Set(),
-  subscribeClick(fn) { this.clicks.add(fn); },
-  unsubscribeClick(fn) { this.clicks.delete(fn); },
   timeScale: () => ({ width: () => 800, coordinateToTime: (x) => x / 100, coordinateToLogical: (x) => x / 10, timeToCoordinate: (time) => time * 100, logicalToCoordinate: (logical) => logical * 10 }),
   priceScale: (side) => ({ width: () => side === 'left' ? 37 : 70 }),
 };
@@ -85,17 +82,18 @@ manager2.detach();
 const manager3 = new DrawingManager();
 manager3.attach(chart, seriesA, container, (series) => series.id, (id) => ({ A: seriesA, B: seriesB })[id]);
 manager3.setActiveTool('trend-line');
-for (const listener of chart.clicks) listener({ point: { x: 120, y: 90 }, time: 11 });
-assert.equal(manager3.getAllDrawings().length, 0, 'multi-anchor drawing waits for its second click');
+const pointerUpAt = (x, y) => container.listeners.get('pointerup')({ clientX: x + 137, clientY: y + 20, button: 0 });
+pointerUpAt(120, 90);
+assert.equal(manager3.getAllDrawings().length, 0, 'multi-anchor drawing waits for its second pointer-up');
 manager3.shiftLogicalAnchors(5);
-for (const listener of chart.clicks) listener({ point: { x: 180, y: 130 }, time: 12 });
+pointerUpAt(180, 130);
 assert.equal(manager3.getAllDrawings().length, 1, 'drawing is registered after required anchors are placed');
 const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
-assert.deepEqual(placed.anchors, [{ time: 11, logical: 17, price: 100 }, { time: 12, logical: 18, price: 100 }], 'pending anchors shift with history prepends without changing their timestamps');
+assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 17, price: 100 }, { time: 1.8, logical: 18, price: 100 }], 'pending anchors shift with history prepends without changing their timestamps');
 assert.equal(placed.seriesId, 'A');
 manager3.shiftLogicalAnchors(5);
-assert.deepEqual(placed.anchors, [{ time: 11, logical: 22, price: 100 }, { time: 12, logical: 23, price: 100 }], 'prepending older candles shifts completed logical anchors but preserves timestamp identity');
+assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 22, price: 100 }, { time: 1.8, logical: 23, price: 100 }], 'prepending older candles shifts completed logical anchors but preserves timestamp identity');
 assert.equal(manager3.getActiveTool(), null, 'tool exits after placement is complete');
 
 // Logical coordinates are the primary geometry; timestamps are a legacy fallback.
@@ -120,7 +118,7 @@ assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport
 
 // Single-anchor tools finish on the first click.
 manager3.setActiveTool('horizontal-line');
-for (const listener of chart.clicks) listener({ point: { x: 220, y: 150 }, time: 13 });
+pointerUpAt(220, 150);
 assert.equal(manager3.getAllDrawings().length, 2, 'single-anchor tool completes on first click');
 assert.equal(manager3.getActiveTool(), null);
 manager3.detach();
