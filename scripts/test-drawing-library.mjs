@@ -32,8 +32,11 @@ function makeSeries(id, paneIndex = 0) {
 }
 const chart = {
   clicks: new Set(),
+  doubleClicks: new Set(),
   subscribeClick(fn) { this.clicks.add(fn); },
   unsubscribeClick(fn) { this.clicks.delete(fn); },
+  subscribeDblClick(fn) { this.doubleClicks.add(fn); },
+  unsubscribeDblClick(fn) { this.doubleClicks.delete(fn); },
   timeScale: () => ({ width: () => 800, coordinateToTime: () => 10, timeToCoordinate: () => 10, logicalToCoordinate: () => 10 }),
   priceScale: (side) => ({ width: () => side === 'left' ? 37 : 70 }),
 };
@@ -86,7 +89,7 @@ manager3.attach(chart, seriesA, container, (series) => series.id, (id) => ({ A: 
 manager3.setActiveTool('trend-line');
 for (const listener of chart.clicks) listener({ point: { x: 120, y: 90 }, time: 11 });
 assert.equal(manager3.getAllDrawings().length, 0, 'multi-anchor drawing waits for its second click');
-for (const listener of chart.clicks) listener({ point: { x: 180, y: 130 }, time: 12 });
+for (const listener of chart.doubleClicks) listener({ point: { x: 180, y: 130 }, time: 12 });
 assert.equal(manager3.getAllDrawings().length, 1, 'drawing is registered after required anchors are placed');
 const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
