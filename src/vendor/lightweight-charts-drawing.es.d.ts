@@ -40,6 +40,7 @@ export class DrawingManager {
   getDrawing(id: string): DrawingInstance | undefined;
   getAllDrawings(): DrawingInstance[];
   clearAll(): void;
+  shiftLogicalAnchors(added: number): void;
   exportDrawings(): DrawingJSON[];
   importDrawings(
     items: DrawingJSON[],
