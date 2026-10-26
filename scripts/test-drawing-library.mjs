@@ -93,6 +93,8 @@ const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
 assert.deepEqual(placed.anchors, [{ time: 11, logical: 12, price: 100 }, { time: 12, logical: 18, price: 100 }]);
 assert.equal(placed.seriesId, 'A');
+manager3.shiftLogicalAnchors(5);
+assert.deepEqual(placed.anchors, [{ time: 11, logical: 17, price: 100 }, { time: 12, logical: 23, price: 100 }], 'prepending older candles shifts logical anchors but preserves timestamp identity');
 assert.equal(manager3.getActiveTool(), null, 'tool exits after placement is complete');
 
 // Logical coordinates are the primary geometry; timestamps are a legacy fallback.
