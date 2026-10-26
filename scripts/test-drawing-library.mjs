@@ -87,14 +87,15 @@ manager3.attach(chart, seriesA, container, (series) => series.id, (id) => ({ A: 
 manager3.setActiveTool('trend-line');
 for (const listener of chart.clicks) listener({ point: { x: 120, y: 90 }, time: 11 });
 assert.equal(manager3.getAllDrawings().length, 0, 'multi-anchor drawing waits for its second click');
+manager3.shiftLogicalAnchors(5);
 for (const listener of chart.clicks) listener({ point: { x: 180, y: 130 }, time: 12 });
 assert.equal(manager3.getAllDrawings().length, 1, 'drawing is registered after required anchors are placed');
 const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
-assert.deepEqual(placed.anchors, [{ time: 11, logical: 12, price: 100 }, { time: 12, logical: 18, price: 100 }]);
+assert.deepEqual(placed.anchors, [{ time: 11, logical: 17, price: 100 }, { time: 12, logical: 18, price: 100 }], 'pending anchors shift with history prepends without changing their timestamps');
 assert.equal(placed.seriesId, 'A');
 manager3.shiftLogicalAnchors(5);
-assert.deepEqual(placed.anchors, [{ time: 11, logical: 17, price: 100 }, { time: 12, logical: 23, price: 100 }], 'prepending older candles shifts logical anchors but preserves timestamp identity');
+assert.deepEqual(placed.anchors, [{ time: 11, logical: 22, price: 100 }, { time: 12, logical: 23, price: 100 }], 'prepending older candles shifts completed logical anchors but preserves timestamp identity');
 assert.equal(manager3.getActiveTool(), null, 'tool exits after placement is complete');
 
 // Logical coordinates are the primary geometry; timestamps are a legacy fallback.
