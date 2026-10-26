@@ -475,7 +475,7 @@ class Cr {
       this._isDragging = !1, this._dragAnchorIndex = null;
       return;
     }
-    if (!this._chart || !this._series || !this._container || (i.button !== void 0 && i.button !== 0)) return;
+    if (!this._chart || !this._series || !this._container || (i.pointerType === "mouse" && i.button !== 0)) return;
     const point = this.getPointFromEvent(i);
     if (!point) return;
     const timeScale = this._chart.timeScale();
