@@ -385,6 +385,15 @@ class Cr {
       i.detach();
     this._drawings.clear(), this._selectedId = null, this.emit("drawing:cleared", {});
   }
+  /** Shift persisted logical anchors when older candles are prepended. */
+  shiftLogicalAnchors(added) {
+    if (!Number.isInteger(added) || added <= 0) return;
+    for (const drawing of this._drawings.values()) {
+      drawing.anchors = drawing.anchors.map((anchor) =>
+        Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
+      );
+    }
+  }
   // ============ Selection ============
   /**
    * Select a drawing by id
