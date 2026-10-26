@@ -18,6 +18,7 @@ function anchorToCoordinate(anchor, timeScale) {
   }
   return timeScale.timeToCoordinate(anchor.time);
 }
+function L(u, i, t) {
   const s = t.x - i.x, e = t.y - i.y, n = s * s + e * e;
   if (n === 0) {
     const h = u.x - i.x, d = u.y - i.y;
@@ -471,7 +472,6 @@ class Cr {
       }
       const logical = this._chart.timeScale().coordinateToLogical(point.x);
       if (logical === null || !Number.isFinite(logical)) {
-        debug("reject-invalid-logical", { logical });
         return;
       }
       this._pendingAnchors.push({ time: i.time, logical, price });
