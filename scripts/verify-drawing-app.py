@@ -18,9 +18,7 @@ with sync_playwright() as p:
                                      has_touch=(mode == "phone"))
         page = context.new_page()
         errors = []
-        drawing_debug = []
         page.on("pageerror", lambda error: errors.append(str(error)))
-        page.on("console", lambda message: drawing_debug.append(message.text) if "[drawing-debug]" in message.text else None)
         page.goto(URL)
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
@@ -33,33 +31,14 @@ with sync_playwright() as p:
         box = page.locator('[data-testid="chart"]').bounding_box()
         page.locator('[data-testid="chart"]').evaluate("""el => {
             window.__drawingDebugEvents = [];
-            const canvases = [...el.querySelectorAll("canvas")];
-            canvases.forEach((canvas, index) => { canvas.dataset.debugCanvasId = String(index); });
-            window.__drawingDebugCanvasSummary = canvases.map((canvas, index) => {
-                const rect = canvas.getBoundingClientRect();
-                return {
-                    index,
-                    width: canvas.width,
-                    height: canvas.height,
-                    rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-                    pointerEvents: getComputedStyle(canvas).pointerEvents,
-                    parentClass: String(canvas.parentElement?.className ?? "")
-                };
-            });
             for (const type of ["pointerdown", "pointerup", "click"]) {
                 el.addEventListener(type, event => {
-                    const rect = event.target?.getBoundingClientRect?.();
                     window.__drawingDebugEvents.push({
                         type,
                         x: event.clientX,
                         y: event.clientY,
                         target: event.target?.tagName ?? null,
-                        canvasId: event.target?.dataset?.debugCanvasId ?? null,
-                        className: String(event.target?.className ?? ""),
-                        detail: event.detail,
-                        button: event.button,
-                        isTrusted: event.isTrusted,
-                        targetRect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+                        className: String(event.target?.className ?? "")
                     });
                 }, true);
             }
@@ -93,8 +72,6 @@ with sync_playwright() as p:
                 f"DEBUG {mode}: DOM pointer/click events="
                 f"{page.evaluate('window.__drawingDebugEvents')}"
             )
-            print(f"DEBUG {mode}: canvasSummary={page.evaluate('window.__drawingDebugCanvasSummary')}")
-            print(f"DEBUG {mode}: drawingManagerLogs={drawing_debug}")
             print(f"DEBUG {mode}: pageErrors={errors}")
             raise
         drawings = export_drawings()
