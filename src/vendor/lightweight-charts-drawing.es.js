@@ -297,7 +297,7 @@ class Cr {
     p(this, "_pendingAnchors", []);
     p(this, "_isDragging", !1);
     p(this, "_dragAnchorIndex", null);
-    this.handleMouseDown = this.handleMouseDown.bind(this), this.handleMouseMove = this.handleMouseMove.bind(this), this.handleMouseUp = this.handleMouseUp.bind(this), this.handleClick = this.handleClick.bind(this);
+    this.handleMouseDown = this.handleMouseDown.bind(this), this.handleMouseMove = this.handleMouseMove.bind(this), this.handleMouseUp = this.handleMouseUp.bind(this);
   }
   // ============ Lifecycle ============
   /**
@@ -318,7 +318,7 @@ class Cr {
       }
       // If a stable seriesId cannot be resolved, preserve the drawing unattached.
     }
-    i.subscribeClick(this.handleClick), s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
+    s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
   }
   /**
    * Detach manager from chart
@@ -327,7 +327,7 @@ class Cr {
     if (this._isAttached) {
       for (const i of this._drawings.values())
         i.detach();
-      this._chart && this._chart.unsubscribeClick(this.handleClick), this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
+      this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
     }
   }
   /**
@@ -469,36 +469,6 @@ class Cr {
     return s ? t.hitTestAnchor(i, s) : null;
   }
   // ============ Event Handling ============
-  handleClick(i) {
-    if (!i.point) return;
-    const point = { x: i.point.x, y: i.point.y };
-    if (this._activeTool) {
-      // The first interactive implementation intentionally targets the manager's primary
-      // series (the permanent price pane). Pane-aware tool placement is handled separately.
-      if (!this._chart || !this._series || i.time === undefined || i.time === null) return;
-      const price = this._series.coordinateToPrice(point.y);
-      if (price === null || !Number.isFinite(price)) return;
-      const definition = kr().get(this._activeTool);
-      if (!definition) {
-        this.setActiveTool(null);
-        return;
-      }
-      const logical = this._chart.timeScale().coordinateToLogical(point.x);
-      if (logical === null || !Number.isFinite(logical)) {
-        return;
-      }
-      this._pendingAnchors.push({ time: i.time, logical, price });
-      if (this._pendingAnchors.length >= definition.requiredAnchors) {
-        const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
-        if (drawing) this.addDrawing(drawing, this._series);
-        this.setActiveTool(null);
-      }
-      return;
-    }
-    const drawing = this.hitTest(point);
-    drawing ? this.selectDrawing(drawing.id) : this.deselectAll();
-  }
   handleMouseDown(i) {
     const t = this.getPointFromEvent(i);
     if (t && this._selectedId) {
@@ -524,14 +494,45 @@ class Cr {
     n !== null && o !== null && (t.updateAnchor(this._dragAnchorIndex, { time: n, ...(Number.isFinite(r) ? { logical: r } : {}), price: o }), this.emit("drawing:updated", { drawingId: t.id, drawing: t }));
   }
   handleMouseUp(i) {
-    if (this._isDragging && this._selectedId) {
-      const t = this._drawings.get(this._selectedId);
-      t && (t.setState("selected"), this.emit("drawing:edit-finished", {
-        drawingId: t.id,
-        drawing: t
-      }));
+    if (this._isDragging) {
+      if (this._selectedId) {
+        const t = this._drawings.get(this._selectedId);
+        t && (t.setState("selected"), this.emit("drawing:edit-finished", {
+          drawingId: t.id,
+          drawing: t
+        }));
+      }
+      this._isDragging = !1, this._dragAnchorIndex = null;
+      return;
     }
-    this._isDragging = !1, this._dragAnchorIndex = null;
+    if (!this._chart || !this._series || !this._container || (i.pointerType === "mouse" && i.button !== 0)) return;
+    const point = this.getPointFromEvent(i);
+    if (!point) return;
+    const timeScale = this._chart.timeScale();
+    const paneHeight = this._series.getPane().getHeight();
+    if (point.x < 0 || point.x > timeScale.width() || point.y < 0 || point.y > paneHeight) return;
+
+    if (this._activeTool) {
+      const time = timeScale.coordinateToTime(point.x);
+      const logical = timeScale.coordinateToLogical(point.x);
+      const price = this._series.coordinateToPrice(point.y);
+      if (time === null || time === void 0 || logical === null || !Number.isFinite(logical) || price === null || !Number.isFinite(price)) return;
+      const definition = kr().get(this._activeTool);
+      if (!definition) {
+        this.setActiveTool(null);
+        return;
+      }
+      this._pendingAnchors.push({ time, logical, price });
+      if (this._pendingAnchors.length >= definition.requiredAnchors) {
+        const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
+        if (drawing) this.addDrawing(drawing, this._series);
+        this.setActiveTool(null);
+      }
+      return;
+    }
+    const drawing = this.hitTest(point);
+    drawing ? this.selectDrawing(drawing.id) : this.deselectAll();
   }
   getPointFromEvent(i) {
     if (!this._container) return null;
