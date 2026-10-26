@@ -53,6 +53,7 @@ fully unit-tested with scripted providers and fake timers.
   to the same market candle.
 - On import, a legacy time-only anchor is upgraded to a logical index when its timestamp can be resolved against
   the loaded chart data. If it cannot be resolved, its timestamp remains available as the legacy fallback.
+- Measurement labels keep the domains separate too: `bars` is derived from the difference between logical indices when both anchors have them; `days` is derived from timestamps. Legacy time-only drawings retain the timestamp-based fallback for bar-span measurements.
 
 ## Visibility and panes (Phase 5)
 **One state, one door.** `VisibilityModel` (pure) is the only record of what is shown: every series has its own visibility, and a
