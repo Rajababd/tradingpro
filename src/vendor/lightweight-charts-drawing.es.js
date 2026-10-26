@@ -14,7 +14,7 @@ const Dn = {
 function anchorToCoordinate(anchor, timeScale) {
   if (Number.isFinite(anchor?.logical) && typeof timeScale.logicalToCoordinate === "function") {
     const logicalCoordinate = timeScale.logicalToCoordinate(anchor.logical);
-    if (logicalCoordinate !== null) return logicalCoordinate;
+    if (Number.isFinite(logicalCoordinate)) return logicalCoordinate;
   }
   return timeScale.timeToCoordinate(anchor.time);
 }
