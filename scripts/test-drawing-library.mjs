@@ -65,6 +65,8 @@ manager2.importDrawings(manager.exportDrawings(), createDrawing, () => seriesB, 
 const pending = manager2.getDrawing('line-1');
 assert.ok(pending, 'unresolved drawing is retained');
 assert.equal(pending.seriesId, 'A');
+assert.deepEqual(pending.anchors.map((anchor) => anchor.logical), [10, 20], 'logical anchors survive export/import without being replaced by timestamps');
+assert.deepEqual(manager2.exportDrawings()[0].anchors.map((anchor) => anchor.logical), [10, 20], 'logical anchors survive a second serialization round-trip');
 assert.equal(pending.getSeries(), null, 'unresolved drawing remains unattached');
 assert.equal(manager2.exportDrawings()[0].seriesId, 'A', 'stable identity survives export');
 manager2.detach();
