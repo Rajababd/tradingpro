@@ -292,6 +292,7 @@ class Cr {
     p(this, "_isAttached", !1);
     p(this, "_seriesIdResolver", null);
     p(this, "_seriesResolverById", null);
+    p(this, "_clickHandler", null);
     // Interaction state
     p(this, "_activeTool", null);
     p(this, "_pendingAnchors", []);
@@ -318,7 +319,10 @@ class Cr {
       }
       // If a stable seriesId cannot be resolved, preserve the drawing unattached.
     }
-    i.subscribeClick(this.handleClick), s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
+    this._clickHandler = (event) => {
+      console.debug("[drawing-debug]", "chart-subscriber-callback", { point: event?.point ?? null, time: event?.time ?? null, activeTool: this._activeTool });
+      this.handleClick(event);
+    }, console.debug("[drawing-debug]", "chart-subscriber-attached"), i.subscribeClick(this._clickHandler), s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
   }
   /**
    * Detach manager from chart
@@ -327,7 +331,7 @@ class Cr {
     if (this._isAttached) {
       for (const i of this._drawings.values())
         i.detach();
-      this._chart && this._chart.unsubscribeClick(this.handleClick), this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
+      this._chart && this._clickHandler && this._chart.unsubscribeClick(this._clickHandler), this._clickHandler = null, this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
     }
   }
   /**
