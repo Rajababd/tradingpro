@@ -31,12 +31,6 @@ function makeSeries(id, paneIndex = 0) {
   return series;
 }
 const chart = {
-  clicks: new Set(),
-  doubleClicks: new Set(),
-  subscribeClick(fn) { this.clicks.add(fn); },
-  unsubscribeClick(fn) { this.clicks.delete(fn); },
-  subscribeDblClick(fn) { this.doubleClicks.add(fn); },
-  unsubscribeDblClick(fn) { this.doubleClicks.delete(fn); },
   timeScale: () => ({ width: () => 800, coordinateToTime: (x) => x / 10, timeToCoordinate: (time) => time * 10, logicalToCoordinate: (logical) => logical * 10 }),
   priceScale: (side) => ({ width: () => side === 'left' ? 37 : 70 }),
 };
