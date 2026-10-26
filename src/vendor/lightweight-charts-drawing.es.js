@@ -11,6 +11,11 @@ const Dn = {
   labelFont: "12px sans-serif",
   labelColor: "#2962FF"
 };
+function logicalBarSpan(first, second, legacyDays = 0) {
+  return Number.isFinite(first?.logical) && Number.isFinite(second?.logical)
+    ? Math.abs(second.logical - first.logical)
+    : legacyDays;
+}
 function anchorToCoordinate(anchor, timeScale) {
   if (Number.isFinite(anchor?.logical)) {
     if (typeof timeScale.logicalToCoordinate !== "function") return null;
@@ -1035,8 +1040,10 @@ const G = class G extends I {
    */
   getTimeSpan() {
     if (!this.isValid()) return 0;
-    const i = G.timeToSeconds(this._anchors[0].time), t = G.timeToSeconds(this._anchors[1].time);
-    return Math.round(Math.abs(t - i) / 86400);
+    const first = this._anchors[0], second = this._anchors[1];
+    const i = G.timeToSeconds(first.time), t = G.timeToSeconds(second.time);
+    const legacyDays = Math.round(Math.abs(t - i) / 86400);
+    return logicalBarSpan(first, second, legacyDays);
   }
 };
 p(G, "HIT_THRESHOLD", 10), // pixels
@@ -7380,13 +7387,14 @@ const Ut = class Ut extends I {
   getDateRangeInfo() {
     if (!this.isValid())
       return { startTime: null, endTime: null, days: 0, bars: 0 };
-    const t = this._anchors[0].time, s = this._anchors[1].time;
+    const first = this._anchors[0], second = this._anchors[1];
+    const t = first.time, s = second.time;
     let e = 0;
     if (typeof t == "string" && typeof s == "string") {
       const o = new Date(t), r = new Date(s);
       e = Math.abs(Math.floor((r.getTime() - o.getTime()) / (1e3 * 60 * 60 * 24)));
     } else typeof t == "number" && typeof s == "number" && (e = Math.abs(Math.floor((s - t) / (3600 * 24))));
-    return { startTime: t, endTime: s, days: e, bars: e };
+    return { startTime: t, endTime: s, days: e, bars: logicalBarSpan(first, second, e) };
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
@@ -7542,7 +7550,8 @@ const qt = class qt extends I {
         bars: 0,
         isUp: !0
       };
-    const t = this._anchors[0].price, s = this._anchors[1].price, e = s - t, n = t !== 0 ? e / t * 100 : 0, o = e >= 0, r = this._anchors[0].time, a = this._anchors[1].time;
+    const first = this._anchors[0], second = this._anchors[1];
+    const t = first.price, s = second.price, e = s - t, n = t !== 0 ? e / t * 100 : 0, o = e >= 0, r = first.time, a = second.time;
     let c = 0;
     if (typeof r == "string" && typeof a == "string") {
       const h = new Date(r), d = new Date(a);
@@ -7556,7 +7565,7 @@ const qt = class qt extends I {
       startTime: r,
       endTime: a,
       days: c,
-      bars: c,
+      bars: logicalBarSpan(first, second, c),
       isUp: o
     };
   }
