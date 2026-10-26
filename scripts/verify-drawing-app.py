@@ -18,7 +18,9 @@ with sync_playwright() as p:
                                      has_touch=(mode == "phone"))
         page = context.new_page()
         errors = []
+        drawing_debug = []
         page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on("console", lambda message: drawing_debug.append(message.text) if "[drawing-debug]" in message.text else None)
         page.goto(URL)
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
@@ -72,6 +74,7 @@ with sync_playwright() as p:
                 f"DEBUG {mode}: DOM pointer/click events="
                 f"{page.evaluate('window.__drawingDebugEvents')}"
             )
+            print(f"DEBUG {mode}: drawingManagerLogs={drawing_debug}")
             print(f"DEBUG {mode}: pageErrors={errors}")
             raise
         drawings = export_drawings()
