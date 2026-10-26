@@ -439,14 +439,9 @@ class Cr {
     return s ? t.hitTestAnchor(i, s) : null;
   }
   // ============ Event Handling ============
-  handleClick(i) {
-    const debug = (stage, extra = {}) => console.debug("[drawing-debug]", stage, {
-      point: i?.point ?? null,
-      time: i?.time ?? null,
-      activeTool: this._activeTool,
-      hasChart:  handleDoubleClick(i) {
-    // Lightweight Charts classifies the second rapid click/tap as a double-click/double-tap,
-    // so route it to placement only while a multi-click drawing tool is active.
+  handleDoubleClick(i) {
+    // Lightweight Charts routes a rapid second click/tap through its double-click event.
+    // Treat it as a drawing anchor only while a drawing tool is active.
     if (this._activeTool) this.handleClick(i);
   }
   handleClick(i) {
@@ -473,7 +468,12 @@ class Cr {
     const drawing = this.hitTest(point);
     drawing ? this.selectDrawing(drawing.id) : this.deselectAll();
   }
-);
+  handleMouseDown(i) {
+    const t = this.getPointFromEvent(i);
+    if (t && this._selectedId) {
+      const s = this.hitTestAnchor(t);
+      if (s !== null) {
+        const e = this._drawings.get(this._selectedId);
         if (e && !e.options.locked) {
           this._isDragging = !0, this._dragAnchorIndex = s, e.setState("editing");
           return;
