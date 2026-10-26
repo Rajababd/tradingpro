@@ -98,8 +98,10 @@ with sync_playwright() as p:
             page.touchscreen.tap(*point)
         horizontal_committed = True
         try:
+            expected_count = 2 if drawing_committed else 1
             page.wait_for_function(
-                "window.__tradingpro.chart.drawings.export().length === (window.__drawingExpectedCount ?? 2)",
+                "expected => window.__tradingpro.chart.drawings.export().length === expected",
+                arg=expected_count,
                 timeout=4000,
             )
         except Exception:
