@@ -7,7 +7,11 @@ import { theme } from '../src/app/theme';
 // They do NOT prove rendering; that is verified separately in a real browser.
 const mocks = vi.hoisted(() => {
   const series = { setData: vi.fn() };
-  const timeScale = { fitContent: vi.fn() };
+  const timeScale = {
+    fitContent: vi.fn(),
+    getVisibleLogicalRange: vi.fn(() => ({ from: 1, to: 5 })),
+    setVisibleLogicalRange: vi.fn(),
+  };
   const chart = {
     addSeries: vi.fn((..._args: unknown[]) => series),
     timeScale: vi.fn(() => timeScale),
@@ -89,6 +93,15 @@ describe('ChartController', () => {
     c.setCandles([candle(100), candle(200)]);
     expect(mocks.series.setData).toHaveBeenCalledTimes(2);
     expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+  });
+
+  it('shifts logical drawing anchors and viewport when older candles are prepended', () => {
+    const c = new ChartController(theme);
+    c.mount(document.createElement('div'));
+    const shiftLogicalAnchors = vi.spyOn(c.drawings, 'shiftLogicalAnchors');
+    c.prependCandles([candle(50), candle(100), candle(200)], 1);
+    expect(shiftLogicalAnchors).toHaveBeenCalledWith(1);
+    expect(mocks.timeScale.setVisibleLogicalRange).toHaveBeenCalledWith({ from: 2, to: 6 });
   });
 
   it('throws if setCandles is called before mount', () => {
