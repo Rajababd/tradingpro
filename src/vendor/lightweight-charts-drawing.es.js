@@ -394,6 +394,9 @@ class Cr {
         Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
       );
     }
+    this._pendingAnchors = this._pendingAnchors.map((anchor) =>
+      Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
+    );
   }
   // ============ Selection ============
   /**
