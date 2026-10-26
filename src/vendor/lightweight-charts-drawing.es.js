@@ -11,7 +11,13 @@ const Dn = {
   labelFont: "12px sans-serif",
   labelColor: "#2962FF"
 };
-function L(u, i, t) {
+function anchorToCoordinate(anchor, timeScale) {
+  if (Number.isFinite(anchor?.logical) && typeof timeScale.logicalToCoordinate === "function") {
+    const logicalCoordinate = timeScale.logicalToCoordinate(anchor.logical);
+    if (logicalCoordinate !== null) return logicalCoordinate;
+  }
+  return timeScale.timeToCoordinate(anchor.time);
+}
   const s = t.x - i.x, e = t.y - i.y, n = s * s + e * e;
   if (n === 0) {
     const h = u.x - i.x, d = u.y - i.y;
@@ -232,12 +238,12 @@ class I {
   }
   // ============ Coordinate Conversion ============
   anchorToPixel(i, t) {
-    const s = t.timeScale.timeToCoordinate(i.time), e = t.priceScale.priceToCoordinate(i.price);
+    const s = anchorToCoordinate(i, t.timeScale), e = t.priceScale.priceToCoordinate(i.price);
     return s === null || e === null ? null : { x: s, y: e };
   }
   pixelToAnchor(i, t) {
-    const s = t.timeScale.coordinateToTime(i.x), e = t.priceScale.coordinateToPrice(i.y);
-    return s === null || e === null ? null : { time: s, price: e };
+    const s = t.timeScale.coordinateToTime(i.x), e = t.priceScale.coordinateToPrice(i.y), n = t.timeScale.coordinateToLogical?.(i.x);
+    return s === null || e === null ? null : { time: s, ...(Number.isFinite(n) ? { logical: n } : {}), price: e };
   }
   getViewport() {
     if (!this._chart || !this._series) return null;
@@ -247,6 +253,7 @@ class I {
       height: s,
       timeScale: {
         coordinateToTime: (e) => i.coordinateToTime(e),
+        coordinateToLogical: (e) => i.coordinateToLogical(e),
         timeToCoordinate: (e) => i.timeToCoordinate(e),
         logicalToCoordinate: (e) => i.logicalToCoordinate(e)
       },
@@ -336,6 +343,15 @@ class Cr {
     if (this._drawings.has(i.id)) {
       console.warn(`Drawing with id ${i.id} already exists`);
       return;
+    }
+    if (this._chart) {
+      const timeScale = this._chart.timeScale();
+      i.anchors = i.anchors.map((anchor) => {
+        if (Number.isFinite(anchor.logical)) return anchor;
+        const x = timeScale.timeToCoordinate(anchor.time);
+        const logical = x === null ? null : timeScale.coordinateToLogical(x);
+        return Number.isFinite(logical) ? { ...anchor, logical } : anchor;
+      });
     }
     this._drawings.set(i.id, i);
     const s = t ? (e = this._seriesIdResolver) == null ? void 0 : e.call(this, t) : void 0;
@@ -453,7 +469,12 @@ class Cr {
         this.setActiveTool(null);
         return;
       }
-      this._pendingAnchors.push({ time: i.time, price });
+      const logical = this._chart.timeScale().coordinateToLogical(point.x);
+      if (logical === null || !Number.isFinite(logical)) {
+        debug("reject-invalid-logical", { logical });
+        return;
+      }
+      this._pendingAnchors.push({ time: i.time, logical, price });
       if (this._pendingAnchors.length >= definition.requiredAnchors) {
         const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
@@ -486,8 +507,8 @@ class Cr {
     if (!s) return;
     const e = t.getViewport();
     if (!e) return;
-    const n = e.timeScale.coordinateToTime(s.x), o = e.priceScale.coordinateToPrice(s.y);
-    n !== null && o !== null && (t.updateAnchor(this._dragAnchorIndex, { time: n, price: o }), this.emit("drawing:updated", { drawingId: t.id, drawing: t }));
+    const n = e.timeScale.coordinateToTime(s.x), o = e.priceScale.coordinateToPrice(s.y), r = e.timeScale.coordinateToLogical?.(s.x);
+    n !== null && o !== null && (t.updateAnchor(this._dragAnchorIndex, { time: n, ...(Number.isFinite(r) ? { logical: r } : {}), price: o }), this.emit("drawing:updated", { drawingId: t.id, drawing: t }));
   }
   handleMouseUp(i) {
     if (this._isDragging && this._selectedId) {
@@ -524,6 +545,7 @@ class Cr {
       height: t,
       timeScale: {
         coordinateToTime: (e) => i.coordinateToTime(e),
+        coordinateToLogical: (e) => i.coordinateToLogical(e),
         timeToCoordinate: (e) => i.timeToCoordinate(e),
         logicalToCoordinate: (e) => i.logicalToCoordinate(e)
       },
@@ -773,7 +795,7 @@ function Er(u, i = 2) {
 }
 class Oe {
   anchorToPixel(i, t) {
-    const s = t.timeScale.timeToCoordinate(i.time), e = t.priceScale.priceToCoordinate(i.price);
+    const s = anchorToCoordinate(i, t.timeScale), e = t.priceScale.priceToCoordinate(i.price);
     return s === null || e === null ? null : { x: s, y: e };
   }
   drawAnchorPoint(i, t, s) {
@@ -1335,7 +1357,7 @@ class jn {
   drawImpl(i) {
     const { context: t, horizontalPixelRatio: s } = i, e = s, n = this._drawing.getViewport();
     if (!n || !this._drawing.options.visible || !this._drawing.isValid()) return;
-    const o = this._drawing.anchors[0], r = n.timeScale.timeToCoordinate(o.time);
+    const o = this._drawing.anchors[0], r = anchorToCoordinate(o, n.timeScale);
     if (r === null) return;
     A(t, this._drawing.style, e);
     const a = { x: r, y: 0 }, c = { x: r, y: n.height };
@@ -1391,7 +1413,7 @@ const pt = class pt extends I {
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
-    const s = this._anchors[0], e = t.timeScale.timeToCoordinate(s.time);
+    const s = this._anchors[0], e = anchorToCoordinate(s, t.timeScale);
     if (e === null) return [];
     const n = [], o = {
       type: "line",
@@ -1402,7 +1424,7 @@ const pt = class pt extends I {
   }
   testHit(t, s) {
     if (!this.isValid()) return !1;
-    const e = this._anchors[0], n = s.timeScale.timeToCoordinate(e.time);
+    const e = this._anchors[0], n = anchorToCoordinate(e, s.timeScale);
     return n === null ? !1 : Math.abs(t.x - n) <= pt.HIT_THRESHOLD;
   }
   clone(t) {
@@ -1728,7 +1750,7 @@ class is {
   drawImpl(i) {
     const { context: t, horizontalPixelRatio: s } = i, e = s, n = this._drawing.getViewport();
     if (!n || !this._drawing.options.visible || !this._drawing.isValid()) return;
-    const o = this._drawing.anchors[0], r = n.timeScale.timeToCoordinate(o.time), a = n.priceScale.priceToCoordinate(o.price);
+    const o = this._drawing.anchors[0], r = anchorToCoordinate(o, n.timeScale), a = n.priceScale.priceToCoordinate(o.price);
     if (r === null || a === null) return;
     A(t, this._drawing.style, e), b(t, { x: 0, y: a }, { x: n.width, y: a }, e), b(t, { x: r, y: 0 }, { x: r, y: n.height }, e);
     const c = this._drawing.crossLineOptions;
@@ -1790,7 +1812,7 @@ const st = class st extends I {
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
-    const s = this._anchors[0], e = t.timeScale.timeToCoordinate(s.time), n = t.priceScale.priceToCoordinate(s.price);
+    const s = this._anchors[0], e = anchorToCoordinate(s, t.timeScale), n = t.priceScale.priceToCoordinate(s.price);
     if (e === null || n === null) return [];
     const o = [];
     return o.push({
@@ -1805,7 +1827,7 @@ const st = class st extends I {
   }
   testHit(t, s) {
     if (!this.isValid()) return !1;
-    const e = this._anchors[0], n = s.timeScale.timeToCoordinate(e.time), o = s.priceScale.priceToCoordinate(e.price);
+    const e = this._anchors[0], n = anchorToCoordinate(e, s.timeScale), o = s.priceScale.priceToCoordinate(e.price);
     return n === null || o === null ? !1 : Math.abs(t.x - n) <= st.HIT_THRESHOLD || Math.abs(t.y - o) <= st.HIT_THRESHOLD;
   }
   clone(t) {
@@ -2146,7 +2168,7 @@ class hs {
   drawImpl(i) {
     const { context: t, horizontalPixelRatio: s } = i, e = s, n = this._drawing.getViewport();
     if (!n || !this._drawing.options.visible || !this._drawing.isValid()) return;
-    const o = this._drawing.anchors[0], r = n.timeScale.timeToCoordinate(o.time), a = n.priceScale.priceToCoordinate(o.price);
+    const o = this._drawing.anchors[0], r = anchorToCoordinate(o, n.timeScale), a = n.priceScale.priceToCoordinate(o.price);
     if (r === null || a === null) return;
     A(t, this._drawing.style, e);
     const c = this._drawing.horizontalRayOptions, l = c.direction ?? "right", h = { x: r, y: a }, d = {
@@ -2204,7 +2226,7 @@ const ut = class ut extends I {
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
-    const s = this._anchors[0], e = t.timeScale.timeToCoordinate(s.time), n = t.priceScale.priceToCoordinate(s.price);
+    const s = this._anchors[0], e = anchorToCoordinate(s, t.timeScale), n = t.priceScale.priceToCoordinate(s.price);
     if (e === null || n === null) return [];
     const o = [], r = {
       type: "line",
@@ -2218,7 +2240,7 @@ const ut = class ut extends I {
   }
   testHit(t, s) {
     if (!this.isValid()) return !1;
-    const e = this._anchors[0], n = s.timeScale.timeToCoordinate(e.time), o = s.priceScale.priceToCoordinate(e.price);
+    const e = this._anchors[0], n = anchorToCoordinate(e, s.timeScale), o = s.priceScale.priceToCoordinate(e.price);
     return n === null || o === null || Math.abs(t.y - o) > ut.HIT_THRESHOLD ? !1 : this._horizontalRayOptions.direction === "right" ? t.x >= n : t.x <= n;
   }
   clone(t) {
