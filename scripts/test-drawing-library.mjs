@@ -34,7 +34,7 @@ const chart = {
   clicks: new Set(),
   subscribeClick(fn) { this.clicks.add(fn); },
   unsubscribeClick(fn) { this.clicks.delete(fn); },
-  timeScale: () => ({ width: () => 800, coordinateToTime: () => 10, timeToCoordinate: () => 10, logicalToCoordinate: () => 10 }),
+  timeScale: () => ({ width: () => 800, coordinateToTime: (x) => x / 100, coordinateToLogical: (x) => x / 10, timeToCoordinate: (time) => time * 100, logicalToCoordinate: (logical) => logical * 10 }),
   priceScale: (side) => ({ width: () => side === 'left' ? 37 : 70 }),
 };
 function createDrawing(_type, data) {
@@ -51,6 +51,7 @@ const drawing = new TrendLine('line-1', [{ time: 1, price: 10 }, { time: 2, pric
 manager.addDrawing(drawing, seriesA);
 assert.equal(drawing.seriesId, 'A');
 assert.equal(drawing.getSeries(), seriesA);
+assert.deepEqual(drawing.anchors.map((anchor) => anchor.logical), [10, 20], 'legacy time anchors are normalized to logical indices when resolvable');
 
 // A detach/reattach cycle must resolve by stable seriesId, not lose the drawing.
 manager.detach();
@@ -90,9 +91,25 @@ for (const listener of chart.clicks) listener({ point: { x: 180, y: 130 }, time:
 assert.equal(manager3.getAllDrawings().length, 1, 'drawing is registered after required anchors are placed');
 const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
-assert.deepEqual(placed.anchors, [{ time: 11, price: 100 }, { time: 12, price: 100 }]);
+assert.deepEqual(placed.anchors, [{ time: 11, logical: 12, price: 100 }, { time: 12, logical: 18, price: 100 }]);
 assert.equal(placed.seriesId, 'A');
 assert.equal(manager3.getActiveTool(), null, 'tool exits after placement is complete');
+
+// Logical coordinates are the primary geometry; timestamps are a legacy fallback.
+const coordinateViewport = {
+  timeScale: {
+    timeToCoordinate: () => 999,
+    logicalToCoordinate: (logical) => logical * 7,
+    coordinateToTime: (x) => x / 100,
+    coordinateToLogical: (x) => x / 7,
+  },
+  priceScale: { priceToCoordinate: (price) => price * 2, coordinateToPrice: (y) => y / 2 },
+};
+const logicalTrend = new TrendLine('logical-line', [{ time: 42, logical: 3, price: 5 }]);
+assert.deepEqual(logicalTrend.anchorToPixel(logicalTrend.anchors[0], coordinateViewport), { x: 21, y: 10 }, 'logical index wins over timestamp when projecting an anchor');
+const legacyTrend = new TrendLine('legacy-line', [{ time: 42, price: 5 }]);
+assert.deepEqual(legacyTrend.anchorToPixel(legacyTrend.anchors[0], coordinateViewport), { x: 999, y: 10 }, 'legacy time-only anchors still render through the timestamp fallback');
+assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport), { time: 0.21, logical: 3, price: 5 }, 'editing an anchor preserves both logical and time coordinates');
 
 // Single-anchor tools finish on the first click.
 manager3.setActiveTool('horizontal-line');
