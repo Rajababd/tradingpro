@@ -440,23 +440,45 @@ class Cr {
   }
   // ============ Event Handling ============
   handleClick(i) {
-    if (!i.point) return;
+    const debug = (stage, extra = {}) => console.debug("[drawing-debug]", stage, {
+      point: i?.point ?? null,
+      time: i?.time ?? null,
+      activeTool: this._activeTool,
+      hasChart: !!this._chart,
+      hasSeries: !!this._series,
+      pendingAnchors: this._pendingAnchors.length,
+      ...extra
+    });
+    debug("handleClick-enter");
+    if (!i.point) {
+      debug("reject-no-point");
+      return;
+    }
     const point = { x: i.point.x, y: i.point.y };
     if (this._activeTool) {
       // The first interactive implementation intentionally targets the manager's primary
       // series (the permanent price pane). Pane-aware tool placement is handled separately.
-      if (!this._chart || !this._series || i.time === undefined || i.time === null) return;
+      if (!this._chart || !this._series || i.time === undefined || i.time === null) {
+        debug("reject-chart-series-or-time");
+        return;
+      }
       const price = this._series.coordinateToPrice(point.y);
-      if (price === null || !Number.isFinite(price)) return;
+      if (price === null || !Number.isFinite(price)) {
+        debug("reject-invalid-price", { price });
+        return;
+      }
       const definition = kr().get(this._activeTool);
       if (!definition) {
+        debug("reject-unknown-tool");
         this.setActiveTool(null);
         return;
       }
       this._pendingAnchors.push({ time: i.time, price });
+      debug("anchor-added", { price, requiredAnchors: definition.requiredAnchors });
       if (this._pendingAnchors.length >= definition.requiredAnchors) {
         const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
+        debug("drawing-created", { drawingCreated: !!drawing, drawingId: drawing?.id ?? null });
         if (drawing) this.addDrawing(drawing, this._series);
         this.setActiveTool(null);
       }
