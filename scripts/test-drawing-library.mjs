@@ -109,6 +109,8 @@ const coordinateViewport = {
 };
 const logicalTrend = new TrendLine('logical-line', [{ time: 42, logical: 3, price: 5 }]);
 assert.deepEqual(logicalTrend.anchorToPixel(logicalTrend.anchors[0], coordinateViewport), { x: 21, y: 10 }, 'logical index wins over timestamp when projecting an anchor');
+const unavailableLogicalViewport = { ...coordinateViewport, timeScale: { ...coordinateViewport.timeScale, logicalToCoordinate: () => null } };
+assert.equal(logicalTrend.anchorToPixel(logicalTrend.anchors[0], unavailableLogicalViewport), null, 'an authoritative logical anchor does not silently fall back to a potentially conflicting timestamp');
 const legacyTrend = new TrendLine('legacy-line', [{ time: 42, price: 5 }]);
 assert.deepEqual(legacyTrend.anchorToPixel(legacyTrend.anchors[0], coordinateViewport), { x: 999, y: 10 }, 'legacy time-only anchors still render through the timestamp fallback');
 assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport), { time: 0.21, logical: 3, price: 5 }, 'editing an anchor preserves both logical and time coordinates');
