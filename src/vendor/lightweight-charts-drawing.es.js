@@ -12,7 +12,8 @@ const Dn = {
   labelColor: "#2962FF"
 };
 function anchorToCoordinate(anchor, timeScale) {
-  if (Number.isFinite(anchor?.logical) && typeof timeScale.logicalToCoordinate === "function") {
+  if (Number.isFinite(anchor?.logical)) {
+    if (typeof timeScale.logicalToCoordinate !== "function") return null;
     const logicalCoordinate = timeScale.logicalToCoordinate(anchor.logical);
     return Number.isFinite(logicalCoordinate) ? logicalCoordinate : null;
   }
