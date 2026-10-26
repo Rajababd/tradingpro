@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { DrawingManager, TrendLine } from '../src/vendor/lightweight-charts-drawing.es.js';
+import { DrawingManager, TrendLine, getToolRegistry } from '../src/vendor/lightweight-charts-drawing.es.js';
 
 function makeContainer() {
   const listeners = new Map();
@@ -117,6 +117,32 @@ assert.equal(logicalTrend.anchorToPixel(logicalTrend.anchors[0], missingLogicalP
 const legacyTrend = new TrendLine('legacy-line', [{ time: 42, price: 5 }]);
 assert.deepEqual(legacyTrend.anchorToPixel(legacyTrend.anchors[0], coordinateViewport), { x: 999, y: 10 }, 'legacy time-only anchors still render through the timestamp fallback');
 assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport), { time: 0.21, logical: 3, price: 5 }, 'editing an anchor preserves both logical and time coordinates');
+
+// Bar measurements use logical candle distance; elapsed days remain timestamp-based.
+const registry = getToolRegistry();
+const measurementAnchors = [
+  { time: '2026-01-01', logical: 10, price: 100 },
+  { time: '2026-01-12', logical: 14, price: 105 },
+];
+const infoLine = registry.createDrawing('info-line', 'info-logical', measurementAnchors);
+const dateRange = registry.createDrawing('date-range', 'date-logical', measurementAnchors);
+const datePriceRange = registry.createDrawing('date-price-range', 'date-price-logical', measurementAnchors);
+assert.equal(infoLine.getTimeSpan(), 4, 'info-line bar span follows logical candle indices, not calendar days');
+assert.deepEqual(
+  (({ days, bars }) => ({ days, bars }))(dateRange.getDateRangeInfo()),
+  { days: 11, bars: 4 },
+  'date-range reports logical bars separately from elapsed calendar days',
+);
+assert.deepEqual(
+  (({ days, bars }) => ({ days, bars }))(datePriceRange.getMeasureInfo()),
+  { days: 11, bars: 4 },
+  'date-price-range reports logical bars separately from elapsed calendar days',
+);
+const legacyInfoLine = registry.createDrawing('info-line', 'info-legacy', [
+  { time: '2026-01-01', price: 100 },
+  { time: '2026-01-12', price: 105 },
+]);
+assert.equal(legacyInfoLine.getTimeSpan(), 11, 'legacy anchors without logical indices retain timestamp-based measurement fallback');
 
 // Single-anchor tools finish on the first click.
 manager3.setActiveTool('horizontal-line');
