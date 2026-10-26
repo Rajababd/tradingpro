@@ -118,12 +118,7 @@ export class DrawingController {
 
   /** Shift logical drawing anchors when older candles are prepended to the data set. */
   shiftLogicalAnchors(added: number): void {
-    if (!Number.isInteger(added) || added <= 0) return;
-    for (const drawing of this.#manager.getAllDrawings()) {
-      drawing.anchors = drawing.anchors.map((anchor) =>
-        Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical! + added } : anchor,
-      );
-    }
+    this.#manager.shiftLogicalAnchors(added);
   }
 
   dispose(): void {
