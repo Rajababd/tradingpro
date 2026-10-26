@@ -33,14 +33,33 @@ with sync_playwright() as p:
         box = page.locator('[data-testid="chart"]').bounding_box()
         page.locator('[data-testid="chart"]').evaluate("""el => {
             window.__drawingDebugEvents = [];
+            const canvases = [...el.querySelectorAll("canvas")];
+            canvases.forEach((canvas, index) => { canvas.dataset.debugCanvasId = String(index); });
+            window.__drawingDebugCanvasSummary = canvases.map((canvas, index) => {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    index,
+                    width: canvas.width,
+                    height: canvas.height,
+                    rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                    pointerEvents: getComputedStyle(canvas).pointerEvents,
+                    parentClass: String(canvas.parentElement?.className ?? "")
+                };
+            });
             for (const type of ["pointerdown", "pointerup", "click"]) {
                 el.addEventListener(type, event => {
+                    const rect = event.target?.getBoundingClientRect?.();
                     window.__drawingDebugEvents.push({
                         type,
                         x: event.clientX,
                         y: event.clientY,
                         target: event.target?.tagName ?? null,
-                        className: String(event.target?.className ?? "")
+                        canvasId: event.target?.dataset?.debugCanvasId ?? null,
+                        className: String(event.target?.className ?? ""),
+                        detail: event.detail,
+                        button: event.button,
+                        isTrusted: event.isTrusted,
+                        targetRect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
                     });
                 }, true);
             }
@@ -74,6 +93,7 @@ with sync_playwright() as p:
                 f"DEBUG {mode}: DOM pointer/click events="
                 f"{page.evaluate('window.__drawingDebugEvents')}"
             )
+            print(f"DEBUG {mode}: canvasSummary={page.evaluate('window.__drawingDebugCanvasSummary')}")
             print(f"DEBUG {mode}: drawingManagerLogs={drawing_debug}")
             print(f"DEBUG {mode}: pageErrors={errors}")
             raise
