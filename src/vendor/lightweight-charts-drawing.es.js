@@ -11,6 +11,19 @@ const Dn = {
   labelFont: "12px sans-serif",
   labelColor: "#2962FF"
 };
+function logicalBarSpan(first, second, legacyDays = 0) {
+  return Number.isFinite(first?.logical) && Number.isFinite(second?.logical)
+    ? Math.abs(second.logical - first.logical)
+    : legacyDays;
+}
+function anchorToCoordinate(anchor, timeScale) {
+  if (Number.isFinite(anchor?.logical)) {
+    if (typeof timeScale.logicalToCoordinate !== "function") return null;
+    const logicalCoordinate = timeScale.logicalToCoordinate(anchor.logical);
+    return Number.isFinite(logicalCoordinate) ? logicalCoordinate : null;
+  }
+  return timeScale.timeToCoordinate(anchor.time);
+}
 function L(u, i, t) {
   const s = t.x - i.x, e = t.y - i.y, n = s * s + e * e;
   if (n === 0) {
@@ -232,12 +245,12 @@ class I {
   }
   // ============ Coordinate Conversion ============
   anchorToPixel(i, t) {
-    const s = t.timeScale.timeToCoordinate(i.time), e = t.priceScale.priceToCoordinate(i.price);
+    const s = anchorToCoordinate(i, t.timeScale), e = t.priceScale.priceToCoordinate(i.price);
     return s === null || e === null ? null : { x: s, y: e };
   }
   pixelToAnchor(i, t) {
-    const s = t.timeScale.coordinateToTime(i.x), e = t.priceScale.coordinateToPrice(i.y);
-    return s === null || e === null ? null : { time: s, price: e };
+    const s = t.timeScale.coordinateToTime(i.x), e = t.priceScale.coordinateToPrice(i.y), n = t.timeScale.coordinateToLogical?.(i.x);
+    return s === null || e === null ? null : { time: s, ...(Number.isFinite(n) ? { logical: n } : {}), price: e };
   }
   getViewport() {
     if (!this._chart || !this._series) return null;
@@ -247,6 +260,7 @@ class I {
       height: s,
       timeScale: {
         coordinateToTime: (e) => i.coordinateToTime(e),
+        coordinateToLogical: (e) => i.coordinateToLogical(e),
         timeToCoordinate: (e) => i.timeToCoordinate(e),
         logicalToCoordinate: (e) => i.logicalToCoordinate(e)
       },
@@ -288,7 +302,7 @@ class Cr {
     p(this, "_pendingAnchors", []);
     p(this, "_isDragging", !1);
     p(this, "_dragAnchorIndex", null);
-    this.handleMouseDown = this.handleMouseDown.bind(this), this.handleMouseMove = this.handleMouseMove.bind(this), this.handleMouseUp = this.handleMouseUp.bind(this), this.handleClick = this.handleClick.bind(this);
+    this.handleMouseDown = this.handleMouseDown.bind(this), this.handleMouseMove = this.handleMouseMove.bind(this), this.handleMouseUp = this.handleMouseUp.bind(this);
   }
   // ============ Lifecycle ============
   /**
@@ -309,7 +323,7 @@ class Cr {
       }
       // If a stable seriesId cannot be resolved, preserve the drawing unattached.
     }
-    i.subscribeClick(this.handleClick), s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
+    s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
   }
   /**
    * Detach manager from chart
@@ -318,7 +332,7 @@ class Cr {
     if (this._isAttached) {
       for (const i of this._drawings.values())
         i.detach();
-      this._chart && this._chart.unsubscribeClick(this.handleClick), this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
+      this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
     }
   }
   /**
@@ -336,6 +350,15 @@ class Cr {
     if (this._drawings.has(i.id)) {
       console.warn(`Drawing with id ${i.id} already exists`);
       return;
+    }
+    if (this._chart) {
+      const timeScale = this._chart.timeScale();
+      i.anchors = i.anchors.map((anchor) => {
+        if (Number.isFinite(anchor.logical)) return anchor;
+        const x = timeScale.timeToCoordinate(anchor.time);
+        const logical = x === null ? null : timeScale.coordinateToLogical(x);
+        return Number.isFinite(logical) ? { ...anchor, logical } : anchor;
+      });
     }
     this._drawings.set(i.id, i);
     const s = t ? (e = this._seriesIdResolver) == null ? void 0 : e.call(this, t) : void 0;
@@ -367,6 +390,18 @@ class Cr {
     for (const i of this._drawings.values())
       i.detach();
     this._drawings.clear(), this._selectedId = null, this.emit("drawing:cleared", {});
+  }
+  /** Shift persisted logical anchors when older candles are prepended. */
+  shiftLogicalAnchors(added) {
+    if (!Number.isInteger(added) || added <= 0) return;
+    for (const drawing of this._drawings.values()) {
+      drawing.anchors = drawing.anchors.map((anchor) =>
+        Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
+      );
+    }
+    this._pendingAnchors = this._pendingAnchors.map((anchor) =>
+      Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
+    );
   }
   // ============ Selection ============
   /**
@@ -439,32 +474,6 @@ class Cr {
     return s ? t.hitTestAnchor(i, s) : null;
   }
   // ============ Event Handling ============
-  handleClick(i) {
-    if (!i.point) return;
-    const point = { x: i.point.x, y: i.point.y };
-    if (this._activeTool) {
-      // The first interactive implementation intentionally targets the manager's primary
-      // series (the permanent price pane). Pane-aware tool placement is handled separately.
-      if (!this._chart || !this._series || i.time === undefined || i.time === null) return;
-      const price = this._series.coordinateToPrice(point.y);
-      if (price === null || !Number.isFinite(price)) return;
-      const definition = kr().get(this._activeTool);
-      if (!definition) {
-        this.setActiveTool(null);
-        return;
-      }
-      this._pendingAnchors.push({ time: i.time, price });
-      if (this._pendingAnchors.length >= definition.requiredAnchors) {
-        const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
-        if (drawing) this.addDrawing(drawing, this._series);
-        this.setActiveTool(null);
-      }
-      return;
-    }
-    const drawing = this.hitTest(point);
-    drawing ? this.selectDrawing(drawing.id) : this.deselectAll();
-  }
   handleMouseDown(i) {
     const t = this.getPointFromEvent(i);
     if (t && this._selectedId) {
@@ -486,18 +495,49 @@ class Cr {
     if (!s) return;
     const e = t.getViewport();
     if (!e) return;
-    const n = e.timeScale.coordinateToTime(s.x), o = e.priceScale.coordinateToPrice(s.y);
-    n !== null && o !== null && (t.updateAnchor(this._dragAnchorIndex, { time: n, price: o }), this.emit("drawing:updated", { drawingId: t.id, drawing: t }));
+    const n = e.timeScale.coordinateToTime(s.x), o = e.priceScale.coordinateToPrice(s.y), r = e.timeScale.coordinateToLogical?.(s.x);
+    n !== null && o !== null && (t.updateAnchor(this._dragAnchorIndex, { time: n, ...(Number.isFinite(r) ? { logical: r } : {}), price: o }), this.emit("drawing:updated", { drawingId: t.id, drawing: t }));
   }
   handleMouseUp(i) {
-    if (this._isDragging && this._selectedId) {
-      const t = this._drawings.get(this._selectedId);
-      t && (t.setState("selected"), this.emit("drawing:edit-finished", {
-        drawingId: t.id,
-        drawing: t
-      }));
+    if (this._isDragging) {
+      if (this._selectedId) {
+        const t = this._drawings.get(this._selectedId);
+        t && (t.setState("selected"), this.emit("drawing:edit-finished", {
+          drawingId: t.id,
+          drawing: t
+        }));
+      }
+      this._isDragging = !1, this._dragAnchorIndex = null;
+      return;
     }
-    this._isDragging = !1, this._dragAnchorIndex = null;
+    if (!this._chart || !this._series || !this._container || (i.pointerType === "mouse" && i.button !== 0)) return;
+    const point = this.getPointFromEvent(i);
+    if (!point) return;
+    const timeScale = this._chart.timeScale();
+    const paneHeight = this._series.getPane().getHeight();
+    if (point.x < 0 || point.x > timeScale.width() || point.y < 0 || point.y > paneHeight) return;
+
+    if (this._activeTool) {
+      const time = timeScale.coordinateToTime(point.x);
+      const logical = timeScale.coordinateToLogical(point.x);
+      const price = this._series.coordinateToPrice(point.y);
+      if (time === null || time === void 0 || logical === null || !Number.isFinite(logical) || price === null || !Number.isFinite(price)) return;
+      const definition = kr().get(this._activeTool);
+      if (!definition) {
+        this.setActiveTool(null);
+        return;
+      }
+      this._pendingAnchors.push({ time, logical, price });
+      if (this._pendingAnchors.length >= definition.requiredAnchors) {
+        const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
+        if (drawing) this.addDrawing(drawing, this._series);
+        this.setActiveTool(null);
+      }
+      return;
+    }
+    const drawing = this.hitTest(point);
+    drawing ? this.selectDrawing(drawing.id) : this.deselectAll();
   }
   getPointFromEvent(i) {
     if (!this._container) return null;
@@ -524,6 +564,7 @@ class Cr {
       height: t,
       timeScale: {
         coordinateToTime: (e) => i.coordinateToTime(e),
+        coordinateToLogical: (e) => i.coordinateToLogical(e),
         timeToCoordinate: (e) => i.timeToCoordinate(e),
         logicalToCoordinate: (e) => i.logicalToCoordinate(e)
       },
@@ -773,7 +814,7 @@ function Er(u, i = 2) {
 }
 class Oe {
   anchorToPixel(i, t) {
-    const s = t.timeScale.timeToCoordinate(i.time), e = t.priceScale.priceToCoordinate(i.price);
+    const s = anchorToCoordinate(i, t.timeScale), e = t.priceScale.priceToCoordinate(i.price);
     return s === null || e === null ? null : { x: s, y: e };
   }
   drawAnchorPoint(i, t, s) {
@@ -999,8 +1040,10 @@ const G = class G extends I {
    */
   getTimeSpan() {
     if (!this.isValid()) return 0;
-    const i = G.timeToSeconds(this._anchors[0].time), t = G.timeToSeconds(this._anchors[1].time);
-    return Math.round(Math.abs(t - i) / 86400);
+    const first = this._anchors[0], second = this._anchors[1];
+    const i = G.timeToSeconds(first.time), t = G.timeToSeconds(second.time);
+    const legacyDays = Math.round(Math.abs(t - i) / 86400);
+    return logicalBarSpan(first, second, legacyDays);
   }
 };
 p(G, "HIT_THRESHOLD", 10), // pixels
@@ -1335,7 +1378,7 @@ class jn {
   drawImpl(i) {
     const { context: t, horizontalPixelRatio: s } = i, e = s, n = this._drawing.getViewport();
     if (!n || !this._drawing.options.visible || !this._drawing.isValid()) return;
-    const o = this._drawing.anchors[0], r = n.timeScale.timeToCoordinate(o.time);
+    const o = this._drawing.anchors[0], r = anchorToCoordinate(o, n.timeScale);
     if (r === null) return;
     A(t, this._drawing.style, e);
     const a = { x: r, y: 0 }, c = { x: r, y: n.height };
@@ -1391,7 +1434,7 @@ const pt = class pt extends I {
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
-    const s = this._anchors[0], e = t.timeScale.timeToCoordinate(s.time);
+    const s = this._anchors[0], e = anchorToCoordinate(s, t.timeScale);
     if (e === null) return [];
     const n = [], o = {
       type: "line",
@@ -1402,7 +1445,7 @@ const pt = class pt extends I {
   }
   testHit(t, s) {
     if (!this.isValid()) return !1;
-    const e = this._anchors[0], n = s.timeScale.timeToCoordinate(e.time);
+    const e = this._anchors[0], n = anchorToCoordinate(e, s.timeScale);
     return n === null ? !1 : Math.abs(t.x - n) <= pt.HIT_THRESHOLD;
   }
   clone(t) {
@@ -1728,7 +1771,7 @@ class is {
   drawImpl(i) {
     const { context: t, horizontalPixelRatio: s } = i, e = s, n = this._drawing.getViewport();
     if (!n || !this._drawing.options.visible || !this._drawing.isValid()) return;
-    const o = this._drawing.anchors[0], r = n.timeScale.timeToCoordinate(o.time), a = n.priceScale.priceToCoordinate(o.price);
+    const o = this._drawing.anchors[0], r = anchorToCoordinate(o, n.timeScale), a = n.priceScale.priceToCoordinate(o.price);
     if (r === null || a === null) return;
     A(t, this._drawing.style, e), b(t, { x: 0, y: a }, { x: n.width, y: a }, e), b(t, { x: r, y: 0 }, { x: r, y: n.height }, e);
     const c = this._drawing.crossLineOptions;
@@ -1790,7 +1833,7 @@ const st = class st extends I {
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
-    const s = this._anchors[0], e = t.timeScale.timeToCoordinate(s.time), n = t.priceScale.priceToCoordinate(s.price);
+    const s = this._anchors[0], e = anchorToCoordinate(s, t.timeScale), n = t.priceScale.priceToCoordinate(s.price);
     if (e === null || n === null) return [];
     const o = [];
     return o.push({
@@ -1805,7 +1848,7 @@ const st = class st extends I {
   }
   testHit(t, s) {
     if (!this.isValid()) return !1;
-    const e = this._anchors[0], n = s.timeScale.timeToCoordinate(e.time), o = s.priceScale.priceToCoordinate(e.price);
+    const e = this._anchors[0], n = anchorToCoordinate(e, s.timeScale), o = s.priceScale.priceToCoordinate(e.price);
     return n === null || o === null ? !1 : Math.abs(t.x - n) <= st.HIT_THRESHOLD || Math.abs(t.y - o) <= st.HIT_THRESHOLD;
   }
   clone(t) {
@@ -2146,7 +2189,7 @@ class hs {
   drawImpl(i) {
     const { context: t, horizontalPixelRatio: s } = i, e = s, n = this._drawing.getViewport();
     if (!n || !this._drawing.options.visible || !this._drawing.isValid()) return;
-    const o = this._drawing.anchors[0], r = n.timeScale.timeToCoordinate(o.time), a = n.priceScale.priceToCoordinate(o.price);
+    const o = this._drawing.anchors[0], r = anchorToCoordinate(o, n.timeScale), a = n.priceScale.priceToCoordinate(o.price);
     if (r === null || a === null) return;
     A(t, this._drawing.style, e);
     const c = this._drawing.horizontalRayOptions, l = c.direction ?? "right", h = { x: r, y: a }, d = {
@@ -2204,7 +2247,7 @@ const ut = class ut extends I {
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
-    const s = this._anchors[0], e = t.timeScale.timeToCoordinate(s.time), n = t.priceScale.priceToCoordinate(s.price);
+    const s = this._anchors[0], e = anchorToCoordinate(s, t.timeScale), n = t.priceScale.priceToCoordinate(s.price);
     if (e === null || n === null) return [];
     const o = [], r = {
       type: "line",
@@ -2218,7 +2261,7 @@ const ut = class ut extends I {
   }
   testHit(t, s) {
     if (!this.isValid()) return !1;
-    const e = this._anchors[0], n = s.timeScale.timeToCoordinate(e.time), o = s.priceScale.priceToCoordinate(e.price);
+    const e = this._anchors[0], n = anchorToCoordinate(e, s.timeScale), o = s.priceScale.priceToCoordinate(e.price);
     return n === null || o === null || Math.abs(t.y - o) > ut.HIT_THRESHOLD ? !1 : this._horizontalRayOptions.direction === "right" ? t.x >= n : t.x <= n;
   }
   clone(t) {
@@ -7344,13 +7387,14 @@ const Ut = class Ut extends I {
   getDateRangeInfo() {
     if (!this.isValid())
       return { startTime: null, endTime: null, days: 0, bars: 0 };
-    const t = this._anchors[0].time, s = this._anchors[1].time;
+    const first = this._anchors[0], second = this._anchors[1];
+    const t = first.time, s = second.time;
     let e = 0;
     if (typeof t == "string" && typeof s == "string") {
       const o = new Date(t), r = new Date(s);
       e = Math.abs(Math.floor((r.getTime() - o.getTime()) / (1e3 * 60 * 60 * 24)));
     } else typeof t == "number" && typeof s == "number" && (e = Math.abs(Math.floor((s - t) / (3600 * 24))));
-    return { startTime: t, endTime: s, days: e, bars: e };
+    return { startTime: t, endTime: s, days: e, bars: logicalBarSpan(first, second, e) };
   }
   computeGeometry(t) {
     if (!this.isValid()) return [];
@@ -7506,7 +7550,8 @@ const qt = class qt extends I {
         bars: 0,
         isUp: !0
       };
-    const t = this._anchors[0].price, s = this._anchors[1].price, e = s - t, n = t !== 0 ? e / t * 100 : 0, o = e >= 0, r = this._anchors[0].time, a = this._anchors[1].time;
+    const first = this._anchors[0], second = this._anchors[1];
+    const t = first.price, s = second.price, e = s - t, n = t !== 0 ? e / t * 100 : 0, o = e >= 0, r = first.time, a = second.time;
     let c = 0;
     if (typeof r == "string" && typeof a == "string") {
       const h = new Date(r), d = new Date(a);
@@ -7520,7 +7565,7 @@ const qt = class qt extends I {
       startTime: r,
       endTime: a,
       days: c,
-      bars: c,
+      bars: logicalBarSpan(first, second, c),
       isUp: o
     };
   }

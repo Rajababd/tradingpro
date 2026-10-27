@@ -116,6 +116,11 @@ export class DrawingController {
     }
   }
 
+  /** Shift logical drawing anchors when older candles are prepended to the data set. */
+  shiftLogicalAnchors(added: number): void {
+    this.#manager.shiftLogicalAnchors(added);
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;

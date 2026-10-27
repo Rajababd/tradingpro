@@ -5,7 +5,7 @@ export interface DrawingJSON {
   type: string;
   seriesId?: string;
   paneIndex: number;
-  anchors: Array<{ time: number | string; price: number }>;
+  anchors: Array<{ time: number | string; logical?: number; price: number }>;
   style?: Record<string, unknown>;
   options?: Record<string, unknown>;
 }
@@ -15,7 +15,7 @@ export interface DrawingInstance {
   type: string;
   seriesId: string | null;
   paneIndex: number;
-  anchors: Array<{ time: number | string; price: number }>;
+  anchors: Array<{ time: number | string; logical?: number; price: number }>;
   options: { visible: boolean; locked: boolean; [key: string]: unknown };
   getSeries(): ISeriesApi<SeriesType> | null;
   isAttached(): boolean;
@@ -40,6 +40,7 @@ export class DrawingManager {
   getDrawing(id: string): DrawingInstance | undefined;
   getAllDrawings(): DrawingInstance[];
   clearAll(): void;
+  shiftLogicalAnchors(added: number): void;
   exportDrawings(): DrawingJSON[];
   importDrawings(
     items: DrawingJSON[],
@@ -59,7 +60,7 @@ export interface DrawingToolRegistry {
   createDrawing(
     type: string,
     id: string,
-    anchors?: Array<{ time: number | string; price: number }>,
+    anchors?: Array<{ time: number | string; logical?: number; price: number }>,
     style?: Record<string, unknown>,
     options?: Record<string, unknown>,
   ): DrawingInstance | null;

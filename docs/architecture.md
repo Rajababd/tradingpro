@@ -42,6 +42,19 @@ consumed imperatively by the chart, and by indicators in Phase 4). A live tick t
 and one small state update, never a chart rebuild or a React render per candle. The service is framework-free and
 fully unit-tested with scripted providers and fake timers.
 
+## Drawing coordinates (Phase 6 extension)
+- A drawing anchor stores a **logical candle index** as its primary horizontal geometry and retains its market
+  timestamp for compatibility and semantic identity. These are different coordinate domains and must never be
+  compared or substituted as if they were the same value.
+- Projection and hit-testing prefer `logicalToCoordinate(logical)`. Timestamp conversion is a fallback only for
+  legacy anchors that do not have a logical index; a known logical anchor is not silently reinterpreted as time.
+- When the user places or edits an anchor, both logical index and timestamp are captured. When older candles are
+  prepended, every stored logical index is shifted by the number of added candles while the timestamp stays tied
+  to the same market candle.
+- On import, a legacy time-only anchor is upgraded to a logical index when its timestamp can be resolved against
+  the loaded chart data. If it cannot be resolved, its timestamp remains available as the legacy fallback.
+- Measurement labels keep the domains separate too: `bars` is derived from the difference between logical indices when both anchors have them; `days` is derived from timestamps. Legacy time-only drawings retain the timestamp-based fallback for bar-span measurements.
+
 ## Visibility and panes (Phase 5)
 **One state, one door.** `VisibilityModel` (pure) is the only record of what is shown: every series has its own visibility, and a
 pane's visibility is *derived* (visible while any of its series is). `VisibilityController` is the only code that adds, shows, hides

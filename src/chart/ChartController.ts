@@ -174,9 +174,10 @@ export class ChartController {
    * the same way: see docs/architecture.md.)
    */
   prependCandles(all: readonly Candle[], added: number): void {
-    if (this.#series === null || this.#viewport === null) throw new Error('ChartController is not mounted.');
+    if (this.#series === null || this.#viewport === null || this.#drawings === null) throw new Error('ChartController is not mounted.');
     const range = this.#viewport.getLogicalRange();
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
+    if (added > 0) this.#drawings.shiftLogicalAnchors(added);
     if (range !== null && added > 0) {
       this.#viewport.setLogicalRange({ from: range.from + added, to: range.to + added });
     }

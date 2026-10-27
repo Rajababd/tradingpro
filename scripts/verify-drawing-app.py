@@ -55,12 +55,14 @@ with sync_playwright() as p:
             check(f"{mode}: first tap does not commit a two-anchor drawing", len(export_drawings()) == 0)
             page.touchscreen.tap(*p2)
 
+        drawing_committed = True
         try:
             page.wait_for_function(
                 "window.__tradingpro.chart.drawings.export().length === 1",
                 timeout=4000,
             )
         except Exception:
+            drawing_committed = False
             print(f"DEBUG {mode}: chartBox={box}")
             print(f"DEBUG {mode}: p1={p1}, p2={p2}")
             print(f"DEBUG {mode}: drawings={export_drawings()}")
@@ -73,14 +75,17 @@ with sync_playwright() as p:
                 f"{page.evaluate('window.__drawingDebugEvents')}"
             )
             print(f"DEBUG {mode}: pageErrors={errors}")
-            raise
+
         drawings = export_drawings()
-        check(f"{mode}: second click/tap commits drawing", len(drawings) == 1)
+        check(f"{mode}: second click/tap commits drawing", drawing_committed and len(drawings) == 1)
         if drawings:
             check(f"{mode}: drawing has two anchors", len(drawings[0].get("anchors", [])) == 2, str(drawings[0]))
             check(f"{mode}: drawing is attached to price series", drawings[0].get("seriesId") == "price", str(drawings[0].get("seriesId")))
-        check(f"{mode}: tool exits after completion", button.get_attribute("aria-pressed") == "false")
+        if drawing_committed:
+            check(f"{mode}: tool exits after completion", button.get_attribute("aria-pressed") == "false")
 
+        # Continue with a one-click tool even if the two-click tool failed; this distinguishes
+        # a general click-dispatch problem from an anchor-count/second-click problem.
         horizontal = page.get_by_role("button", name="Horizontal line")
         horizontal.click()
         point = (box["x"] + box["width"] * 0.55, box["y"] + box["height"] * 0.48)
@@ -88,10 +93,22 @@ with sync_playwright() as p:
             page.mouse.click(*point)
         else:
             page.touchscreen.tap(*point)
-        page.wait_for_function("window.__tradingpro.chart.drawings.export().length === 2", timeout=4000)
+        horizontal_committed = True
+        try:
+            expected_count = 2 if drawing_committed else 1
+            page.wait_for_function(
+                "expected => window.__tradingpro.chart.drawings.export().length === expected",
+                arg=expected_count,
+                timeout=4000,
+            )
+        except Exception:
+            horizontal_committed = False
+            print(f"DEBUG {mode}: one-click tool timed out")
+            print(f"DEBUG {mode}: drawings after one-click tool={export_drawings()}")
+            print(f"DEBUG {mode}: pageErrors={errors}")
         drawings = export_drawings()
-        check(f"{mode}: single-anchor tool commits on one click/tap", len(drawings) == 2)
-        if drawings:
+        check(f"{mode}: single-anchor tool commits on one click/tap", horizontal_committed and len(drawings) == (2 if drawing_committed else 1))
+        if horizontal_committed and drawings:
             check(f"{mode}: single-anchor drawing has one anchor", len(drawings[-1].get("anchors", [])) == 1)
         check(f"{mode}: no browser exceptions", not errors, repr(errors))
         context.close()
