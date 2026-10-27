@@ -61,6 +61,9 @@ jobs:
           cat /tmp/tradingpro-vite.log
           exit 1
 
+      - name: Verify Phase 6 UI and indicator acceptance
+        run: python scripts/verify-phase6.py
+
       - name: Verify drawing interactions on desktop and phone viewport
         run: python scripts/verify-drawing-app.py
 

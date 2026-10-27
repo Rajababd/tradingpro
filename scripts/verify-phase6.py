@@ -125,7 +125,13 @@ with sync_playwright() as p:
     check("M13 SMA menu lists Price first, then every eligible output, exactly as the registry derives them",
           keys == ev(f"{T}.engine.registry.smaSourceOptions().map((o) => o.key)") and keys[0] == "price" and "macd:signal" in keys and len(keys) == 8, keys)
     labels = ev("[...document.querySelectorAll('#menu-sma .row-name')].map((e) => e.textContent.replace(' · not shown', ''))")
-    check("M13 ...with registry labels", labels == ["Price", "RSI", "Volume", "OBV", "Accumulation/Distribution".replace("Accumulation/Distribution", "A/D") if False else labels[4], "MACD · MACD", "MACD · Signal", "MACD · Histogram"] or labels[0] == "Price", labels)
+    expected_sma_keys = ["price", "rsi:rsi", "volume:volume", "obv:obv", "ad:ad", "macd:macd", "macd:signal", "macd:histogram"]
+    expected_sma_labels = ["Price", "RSI", "Volume", "OBV", "Accumulation/Distribution", "MACD · MACD", "MACD · Signal", "MACD · Histogram"]
+    check("M13 SMA menu has the complete expected source keys in order", keys == expected_sma_keys, keys)
+    check("M13 SMA menu has the complete expected labels in order", labels == expected_sma_labels, labels)
+    check("M13 SMA source menu matches registry keys and labels", 
+          keys == ev(f"{T}.engine.registry.smaSourceOptions().map((o) => o.key)") and
+          labels == ev(f"{T}.engine.registry.smaSourceOptions().map((o) => o.label)"))
     check("M6 every SMA starts off with period 20", ev("[...document.querySelectorAll('#menu-sma .field input')].every((i) => i.value === '20')") and ev("[...document.querySelectorAll('#menu-sma input[role=switch]')].every((i) => !i.checked)"))
 
     # ---- M6: SMA on price (Scenario C)
