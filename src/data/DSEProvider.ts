@@ -63,6 +63,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   const low = firstNumber(row.low, row.min_val);
   // Do not fabricate OHLC values from a close-only index point.
   if (open === null || high === null || low === null || close === null) return null;
+  if (open <= 0 || high <= 0 || low <= 0 || close <= 0) return null;
   if (high < low || high < open || high < close || low > open || low > close) return null;
   const volume = firstNumber(row.volume_traded, row.traded_volume, row.volume);
   const valueTraded = firstNumber(row.value_traded, row.traded_value, row.valueTraded);
@@ -134,6 +135,7 @@ export class DSEProvider implements MarketDataProvider {
   readonly isSimulated = false;
   /** Non-fatal refresh warning shown when stale cached data is kept after a failed refresh. */
   lastRefreshWarning: string | null = null;
+  lastSymbolDataWarning: string | null = null;
   /** In-memory fallback also keeps this provider usable if browser storage is unavailable/full. */
   readonly #memoryCache = new Map<string, DailyRow[]>();
 
@@ -146,18 +148,21 @@ export class DSEProvider implements MarketDataProvider {
   async refreshAll(): Promise<{ refreshed: string[]; failed: string[] }> {
     const refreshed: string[] = [];
     const failed: string[] = [];
+    const qualityWarnings: string[] = [];
     for (const item of DSE_SYMBOLS) {
       try {
         await this.#fetchBars(item.symbol, '1D', undefined, true);
         if (this.lastRefreshWarning !== null) failed.push(item.symbol);
         else refreshed.push(item.symbol);
+        if (this.lastSymbolDataWarning !== null) qualityWarnings.push(item.symbol);
       } catch {
         failed.push(item.symbol);
       }
     }
-    this.lastRefreshWarning = failed.length > 0
-      ? `تعذّر تحديث بعض الرموز (${failed.join(', ')}). ستُستخدم البيانات المحفوظة حيثما توفرت.`
-      : null;
+    const warnings: string[] = [];
+    if (failed.length > 0) warnings.push(`تعذّر تحديث بعض الرموز (${failed.join(', ')}). ستُستخدم البيانات المحفوظة حيثما توفرت.`);
+    if (qualityWarnings.length > 0) warnings.push(`استُبعدت سجلات OHLC غير صالحة من: ${qualityWarnings.join(', ')}.`);
+    this.lastRefreshWarning = warnings.length > 0 ? warnings.join(' ') : null;
     return { refreshed, failed };
   }
 
@@ -207,6 +212,7 @@ export class DSEProvider implements MarketDataProvider {
 
   async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal, refresh = false): Promise<Array<Record<string, unknown>>> {
     getSymbol(symbol);
+    if (refresh) this.lastSymbolDataWarning = null;
     const cached = this.#readCachedDaily(symbol);
     if (!refresh && cached !== null) return aggregateDaily(cached, timeframe);
     if (!refresh) throw new Error(`No cached data for ${symbol}. Click «تحديث البيانات» to fetch history.`);
@@ -234,7 +240,11 @@ export class DSEProvider implements MarketDataProvider {
       } catch {
         throw new Error(`DSE returned non-JSON data for ${symbol}.`);
       }
-      const daily = rowsFromPayload(payload).map(parseDailyRow).filter((row): row is DailyRow => row !== null);
+      const rawRows = rowsFromPayload(payload);
+      const daily = rawRows.map(parseDailyRow).filter((row): row is DailyRow => row !== null);
+      this.lastSymbolDataWarning = daily.length < rawRows.length
+        ? `${rawRows.length - daily.length} سجلاً غير صالحاً من أصل ${rawRows.length}`
+        : null;
       if (daily.length === 0) {
         throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
       }
