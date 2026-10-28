@@ -35,31 +35,37 @@ def extract_rows(payload):
     return None
 
 
-def parseable_ohlc_rows(rows):
-    if not rows:
-        return 0
-    count = 0
+def ohlc_stats(rows):
+    stats = {"valid": 0, "missing_or_unparseable": 0, "inconsistent": 0}
     def numeric(value):
         try:
-            return float(str(value).replace(",", "").strip())
+            text = str(value).replace(",", "").strip()
+            return float(text) if text else None
         except (TypeError, ValueError):
             return None
-    for row in rows:
+    def first_numeric(*values):
+        for value in values:
+            parsed = numeric(value)
+            if parsed is not None:
+                return parsed
+        return None
+    for row in rows or []:
         if not isinstance(row, dict):
+            stats["missing_or_unparseable"] += 1
             continue
         date = row.get("date") or row.get("trading_date") or row.get("timestamp")
-        if not isinstance(date, str) or len(date) < 10:
-            continue
-        open_price = numeric(row.get("open", row.get("open_val")))
-        high = numeric(row.get("high", row.get("max_val")))
-        low = numeric(row.get("low", row.get("min_val")))
-        close = numeric(row.get("close", row.get("close_val", row.get("value", row.get("average_price")))))
-        if None in (open_price, high, low, close):
+        open_price = first_numeric(row.get("open"), row.get("open_val"))
+        high = first_numeric(row.get("high"), row.get("max_val"))
+        low = first_numeric(row.get("low"), row.get("min_val"))
+        close = first_numeric(row.get("close"), row.get("close_val"), row.get("value"), row.get("average_price"))
+        if not isinstance(date, str) or len(date) < 10 or None in (open_price, high, low, close):
+            stats["missing_or_unparseable"] += 1
             continue
         if high < max(open_price, close, low) or low > min(open_price, close):
+            stats["inconsistent"] += 1
             continue
-        count += 1
-    return count
+        stats["valid"] += 1
+    return stats
 
 
 for symbol, url in ENDPOINTS.items():
@@ -90,11 +96,11 @@ for symbol, url in ENDPOINTS.items():
             rows = extract_rows(payload)
             print(f"Root shape: {'array' if isinstance(payload, list) else type(payload).__name__}")
             print(f"Historical rows: {len(rows) if rows is not None else '(no recognized array)'}")
-            valid_ohlc = parseable_ohlc_rows(rows)
-            print(f"Rows with parseable, internally consistent OHLC: {valid_ohlc}")
+            stats = ohlc_stats(rows)
+            print(f"OHLC rows: {stats['valid']} valid; {stats['missing_or_unparseable']} missing/unparseable; {stats['inconsistent']} internally inconsistent")
             if rows and isinstance(rows[0], dict):
                 print("First row keys: " + ", ".join(sorted(rows[0].keys())))
-            if valid_ohlc == 0:
+            if stats["valid"] == 0:
                 raise SystemExit(f"{symbol}: endpoint returned no parseable OHLC candles")
     except urllib.error.HTTPError as error:
         print(f"HTTP: {error.code}")
