@@ -70,7 +70,7 @@ def ohlc_stats(rows):
                     "average_price": row.get("average_price"),
                     "reference_price": row.get("reference_price"),
                     "volume_traded": row.get("volume_traded", row.get("traded_volume")),
-                    "value_traded": row.get("value_traded", row.get("value_traded")),
+                    "value_traded": row.get("value_traded", row.get("traded_value")),
                 })
             continue
         stats["valid"] += 1
