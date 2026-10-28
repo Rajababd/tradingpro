@@ -37,7 +37,7 @@ traded value are summed only when every contributing daily value is present. The
 trading session in the bucket, avoiding synthetic weekend timestamps. Selecting a different symbol or timeframe reloads
 the series and restores drawings from that symbol/timeframe's separate storage key.
 
-The DSE feed is polled every five minutes because the wired source is historical daily data, not an intraday stream.
+The DSE feed is polled every fifteen minutes because the wired source is historical daily data, not an intraday stream.
 Direct browser access depends on DSE allowing cross-origin requests (CORS). If the browser blocks these requests, a
 same-origin server/proxy is required; this client-only change does not silently bypass that browser security boundary.
 The endpoint schemas and live CORS behavior must be verified in the deployed browser before considering the integration
