@@ -281,7 +281,7 @@ with sync_playwright() as p:
     if drag_point:
         px, py, canvas_rect = drag_point
         delta = min(canvas_rect["width"] * 0.18, 180)
-        page.mouse.move(px, py); page.mouse.down(); page.mouse.move(px - delta, py, steps=10); page.mouse.up(); page.wait_for_timeout(250)
+        page.mouse.move(px, py); page.mouse.down(); page.mouse.move(px + delta, py, steps=10); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
 
