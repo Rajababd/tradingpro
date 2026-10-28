@@ -212,6 +212,7 @@ with sync_playwright() as p:
             check(f"{mode}: clear drawings removes all drawings", len(export_drawings()) == 0)
             page.wait_for_timeout(350)  # allow the debounced empty state to be persisted
             page.reload()
+            page.get_by_role("button", name="تحديث البيانات").click()
             page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
             page.wait_for_timeout(400)  # allow asynchronous restoration to complete
             check(f"{mode}: cleared drawings stay cleared after reload", len(export_drawings()) == 0,
