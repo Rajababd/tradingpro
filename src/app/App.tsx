@@ -66,8 +66,10 @@ export function App() {
     const drawingEvents = ['drawing:added', 'drawing:removed', 'drawing:cleared', 'drawing:updated', 'drawing:edit-finished'];
     const unsubscribeDrawingEvents = drawingEvents.map((event) => chart.drawings.on(event, persistDrawings));
 
-    if (refreshRequest?.symbol === symbol && refreshRequest.timeframe === timeframe) {
-      void service.load({ symbol, timeframe, limit: config.initialBars }).then(() => {
+    const explicitRefresh = refreshRequest?.symbol === symbol && refreshRequest.timeframe === timeframe;
+    // Selection changes only read cached history. Network access is reserved for the refresh button.
+    if (explicitRefresh || provider.hasCachedData(symbol)) {
+      void service.load({ symbol, timeframe, limit: config.initialBars, refresh: explicitRefresh }).then(() => {
         if (cancelled || service.getState().status !== 'ready') return;
         try {
           const saved = loadDrawings(window.localStorage, storageKey);
