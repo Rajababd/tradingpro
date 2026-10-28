@@ -64,15 +64,18 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   // Do not fabricate OHLC values from a close-only index point.
   if (open === null || high === null || low === null || close === null) return null;
   if (open <= 0 || high <= 0 || low <= 0 || close <= 0) return null;
-  if (high < low || high < open || high < close || low > open || low > close) return null;
+  // The DSE endpoint is the sole source of truth. Repair only OHLC relationships
+  // using the source's own values; never synthesize a missing price.
+  const normalizedHigh = Math.max(high, open, close);
+  const normalizedLow = Math.min(low, open, close);
   const volume = firstNumber(row.volume_traded, row.traded_volume, row.volume);
   const valueTraded = firstNumber(row.value_traded, row.traded_value, row.valueTraded);
   if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
   return {
     date,
     open,
-    high,
-    low,
+    high: normalizedHigh,
+    low: normalizedLow,
     close,
     volume,
     valueTraded,
