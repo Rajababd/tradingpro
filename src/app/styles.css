@@ -424,3 +424,70 @@ body {
 .drawing-tool-cancel {
   color: var(--c-warn);
 }
+
+
+/* ---- DSE instrument and timeframe controls --------------------------------------------------- */
+.market-select-label select {
+  min-height: 40px;
+  max-width: 11rem;
+  padding: 0 8px;
+  border: 1px solid var(--c-rule);
+  border-radius: 8px;
+  background: var(--c-ink);
+  color: var(--c-text);
+  font: inherit;
+}
+.market-name {
+  max-width: 15rem;
+  overflow: hidden;
+  color: var(--c-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.timeframe-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--c-rule);
+  border-radius: 9px;
+}
+.timeframe-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.timeframe-button[aria-pressed='true'] {
+  background: var(--c-accent);
+  color: var(--c-ink);
+  font-weight: 650;
+}
+.timeframe-button:focus-visible,
+.market-select-label select:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 600px) {
+  .topbar { gap: 6px 8px; padding: 8px; }
+  .market-name { display: none; }
+  .market-select-label select { max-width: 6.5rem; }
+  .timeframe-button { padding: 0 8px; }
+  .status { flex-basis: 100%; margin-left: 0; }
+}
