@@ -37,6 +37,9 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Diagnose live DSE endpoints and browser CORS headers (informational)
+        run: python scripts/check-dse-endpoints.py
+
       - name: Set up Python for browser test
         uses: actions/setup-python@v5
         with:
