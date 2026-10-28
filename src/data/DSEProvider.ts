@@ -2,12 +2,12 @@ import type { Timeframe } from '../types/marketData';
 import type { HistoricalRequest, LatestRequest, MarketDataProvider } from './MarketDataProvider';
 
 export const DSE_SYMBOLS = [
-  { symbol: 'DWX', name: 'Damascus Weighted Index', url: 'https://dse.sy/index/index_graph/all/DWX', kind: 'index' },
-  { symbol: 'AVOC', name: 'Avoc', url: 'https://dse.sy/issuer-company/graph/14/all/line', kind: 'equity' },
-  { symbol: 'ABC', name: 'ABC', url: 'https://dse.sy/issuer-company/graph/95/all/line', kind: 'equity' },
-  { symbol: 'BBSY', name: 'BBSY', url: 'https://dse.sy/issuer-company/graph/84/all/line', kind: 'equity' },
-  { symbol: 'NIB', name: 'NIB', url: 'https://dse.sy/issuer-company/graph/96/all/line', kind: 'equity' },
-  { symbol: 'AHT', name: 'AHT', url: 'https://dse.sy/issuer-company/graph/1/all/line', kind: 'equity' },
+  { symbol: 'DWX', name: 'Damascus Weighted Index', kind: 'index' },
+  { symbol: 'AVOC', name: 'Avoc', kind: 'equity' },
+  { symbol: 'ABC', name: 'ABC', kind: 'equity' },
+  { symbol: 'BBSY', name: 'BBSY', kind: 'equity' },
+  { symbol: 'NIB', name: 'NIB', kind: 'equity' },
+  { symbol: 'AHT', name: 'AHT', kind: 'equity' },
 ] as const;
 
 type DseSymbol = (typeof DSE_SYMBOLS)[number];
