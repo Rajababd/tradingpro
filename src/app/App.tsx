@@ -106,6 +106,7 @@ export function App() {
     state.status === 'idle' ? 'اضغط «تحديث البيانات» لجلب الأسعار' : '',
     state.status === 'ready' ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '') : '',
     state.status === 'error' ? 'Failed to load' : '',
+    provider.lastRefreshWarning ?? '',
     feed.label,
     describeHistory(state),
   ].filter((part) => part !== '');
