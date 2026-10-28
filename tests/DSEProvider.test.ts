@@ -123,6 +123,25 @@ describe('DSEProvider', () => {
     expect(bars[0]).toMatchObject({ open: 10, high: 12, low: 9, close: 11, volume: 100 });
   });
 
+  it('reports excluded malformed rows after a successful partial all-symbol refresh', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
+    const payload = [
+      ...dailyRows,
+      { date: '2026-02-04', open: '10', high: '8', low: '9', close: '11' },
+    ];
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new DSEProvider();
+    const result = await provider.refreshAll();
+    expect(result.refreshed).toHaveLength(6);
+    expect(result.failed).toEqual([]);
+    expect(provider.lastRefreshWarning).toMatch(/استُبعدت سجلات OHLC غير صالحة/);
+  });
+
   it('rejects malformed OHLC relationships before caching them', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify([
       { date: '2026-01-26', open: '10', high: '8', low: '9', close: '11' },
