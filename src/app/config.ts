@@ -7,5 +7,5 @@ export const config = {
   olderPageBars: 150,
   loadOlderWithinBars: 20,
   /** Re-fetch the daily history conservatively; DSE has no intraday feed wired here. */
-  pollIntervalMs: 300_000,
+  pollIntervalMs: 900_000,
 } as const;
