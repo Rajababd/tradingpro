@@ -119,6 +119,8 @@ export class DSEProvider implements MarketDataProvider {
   readonly id = 'dse';
   readonly displayName = 'Damascus Securities Exchange';
   readonly isSimulated = false;
+  /** Non-fatal refresh warning shown when stale cached data is kept after a failed refresh. */
+  lastRefreshWarning: string | null = null;
 
   hasCachedData(symbol: string): boolean {
     getSymbol(symbol);
@@ -168,35 +170,47 @@ export class DSEProvider implements MarketDataProvider {
     const cached = this.#readCachedDaily(symbol);
     if (!refresh && cached !== null) return aggregateDaily(cached, timeframe);
     if (!refresh) throw new Error(`No cached data for ${symbol}. Click «تحديث البيانات» to fetch history.`);
-    const configuredBase = (import.meta as unknown as { env?: { VITE_DSE_API_BASE_URL?: string } }).env?.VITE_DSE_API_BASE_URL?.trim();
-    const apiBase = configuredBase || '/api/market-data';
-    const separator = apiBase.includes('?') ? '&' : '?';
-    const endpoint = `${apiBase}${separator}symbol=${encodeURIComponent(symbol)}`;
-    let response: Response;
+    if (refresh) this.lastRefreshWarning = null;
     try {
-      response = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, ...(signal === undefined ? {} : { signal }) });
+      const configuredBase = (import.meta as unknown as { env?: { VITE_DSE_API_BASE_URL?: string } }).env?.VITE_DSE_API_BASE_URL?.trim();
+      const apiBase = configuredBase || '/api/market-data';
+      const separator = apiBase.includes('?') ? '&' : '?';
+      const endpoint = `${apiBase}${separator}symbol=${encodeURIComponent(symbol)}`;
+      let response: Response;
+      try {
+        response = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, ...(signal === undefined ? {} : { signal }) });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        throw new Error(`Cannot reach the TradingPro market-data API for ${symbol}. Check that the proxy backend is running and VITE_DSE_API_BASE_URL is configured for deployment.`);
+      }
+      if (!response.ok) {
+        let detail = '';
+        try { detail = (await response.text()).slice(0, 180); } catch { /* response body may be unavailable */ }
+        throw new Error(`Market-data API request for ${symbol} failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}.`);
+      }
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error(`DSE returned non-JSON data for ${symbol}.`);
+      }
+      const daily = rowsFromPayload(payload).map(parseDailyRow).filter((row): row is DailyRow => row !== null);
+      if (daily.length === 0) {
+        throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
+      }
+      const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
+      // Replace the cache only after a non-empty, parseable response is confirmed.
+      this.#writeCachedDaily(symbol, sortedDaily);
+      this.lastRefreshWarning = null;
+      return aggregateDaily(sortedDaily, timeframe);
     } catch (error) {
       if (signal?.aborted) throw error;
-      throw new Error(`Cannot reach the TradingPro market-data API for ${symbol}. Check that the proxy backend is running and VITE_DSE_API_BASE_URL is configured for deployment.`);
+      if (refresh && cached !== null) {
+        const detail = error instanceof Error ? error.message : String(error);
+        this.lastRefreshWarning = `تعذّر تحديث ${symbol}؛ نعرض البيانات المحفوظة. ${detail}`;
+        return aggregateDaily(cached, timeframe);
+      }
+      throw error;
     }
-    if (!response.ok) {
-      let detail = '';
-      try { detail = (await response.text()).slice(0, 180); } catch { /* response body may be unavailable */ }
-      throw new Error(`Market-data API request for ${symbol} failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}.`);
-    }
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error(`DSE returned non-JSON data for ${symbol}.`);
-    }
-    const daily = rowsFromPayload(payload).map(parseDailyRow).filter((row): row is DailyRow => row !== null);
-    if (daily.length === 0) {
-      throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
-    }
-    const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
-    // Commit to cache only after a non-empty, parseable history response is confirmed.
-    this.#writeCachedDaily(symbol, sortedDaily);
-    return aggregateDaily(sortedDaily, timeframe);
   }
 }
