@@ -1,7 +1,7 @@
 # TradingPro
 
 Mobile-first financial charting app (TypeScript, React, Vite, Lightweight Charts 5).
-Status: **Phase 6 (SMA system and top bar)**. The Indicators and SMA dropdowns work end to end: RSI, Volume, OBV, Accumulation/Distribution and MACD, and an SMA on price or on any indicator output, shown in their own panes, with visibility and settings controls. Settings are **not saved across reloads yet** (Phase 8). The app shows a validated, labelled-simulated candlestick chart with live incremental updates, paging through older history, failure recovery, series/pane managers, viewport and crosshair inspection. Indicator conventions and the display rules are in `docs/indicators.md`.
+Status: **Phase 6 (SMA system and top bar)**. The Indicators and SMA dropdowns work end to end: RSI, Volume, OBV, Accumulation/Distribution and MACD, and an SMA on price or on any indicator output, shown in their own panes, with visibility and settings controls. Settings are **not saved across reloads yet** (Phase 8). The app supports DSE historical daily OHLC data via an allowlisted proxy, with user-triggered refresh, weekly/monthly aggregation, paging through older history, failure reporting, series/pane managers, viewport and crosshair inspection. Indicator conventions and the display rules are in `docs/indicators.md`.
 See `docs/architecture.md` for design decisions and the data-validation policy.
 
 ## Requirements
@@ -50,7 +50,7 @@ They are sandbox tooling, not part of `npm test` or any CI yet.
 - Paging triggers only on user gestures, so changing the window size alone does not load more history.
 - The legend shows price-series OHLC only; indicator values come with the indicator phase.
 - A hidden pane cannot be made fully invisible by the chart library: each leaves about 3 px (a sliver and its separator, thin stacked lines above the time axis). Documented in `docs/lightweight-charts-notes.md`.
-- The initial-load error overlay and Retry button are covered by unit tests of the service only, not exercised in a browser.
+- The market-data error overlay and manual retry path are exercised through the real UI in the browser acceptance workflow.
 - A malformed browser locale tag makes the chart library throw and draw nothing (seen in a headless sandbox). Real browsers send valid tags.
 - **Settings are not saved.** Which indicators are shown, their parameters and the SMA settings reset on reload (Phase 8). Nothing is displayed by default.
 - One SMA per source (stable identity per source), and Price means the close.
