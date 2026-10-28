@@ -69,7 +69,7 @@ describe('DSEProvider', () => {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value); },
     } });
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 }));
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(dailyRows), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const provider = new DSEProvider();
     const result = await provider.refreshAll();
