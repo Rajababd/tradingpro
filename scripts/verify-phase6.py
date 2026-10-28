@@ -42,7 +42,9 @@ def new_page(browser, **ctx):
             "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
             "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
         })
+    requested_urls = []
     def mock_dse(route):
+        requested_urls.append(route.request.url)
         payload = daily_rows
         if "symbol=DWX" in route.request.url:
             payload = [{
@@ -54,6 +56,8 @@ def new_page(browser, **ctx):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
     page.route("**/api/market-data**", mock_dse)
     page.goto(URL)
+    page.wait_for_timeout(200)
+    check("manual refresh: initial page load makes no market-data request", len(requested_urls) == 0, requested_urls)
     page.get_by_role("button", name="تحديث البيانات").click()
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=20000)
     page.evaluate(JS_HELPERS)
