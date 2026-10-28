@@ -63,6 +63,20 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page, errors = new_page(browser, viewport={"width": 1280, "height": 800})
     ev = page.evaluate
+    # Verify the new timeframe selector against the mocked historical daily source.
+    daily_count = ev(f"{T}.service.candles.length")
+    timeframe_buttons = page.locator(".timeframe-button")
+    check("DSE UI exposes daily, weekly and monthly display frames", timeframe_buttons.count() == 3)
+    page.get_by_role("button", name="أسبوعي", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=\\"true\\"]')?.textContent === 'أسبوعي'", timeout=10000)
+    weekly_count = ev(f"{T}.service.candles.length")
+    check("weekly frame aggregates daily source history into fewer candles", 0 < weekly_count < daily_count, (daily_count, weekly_count))
+    page.get_by_role("button", name="شهري", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=\\"true\\"]')?.textContent === 'شهري'", timeout=10000)
+    monthly_count = ev(f"{T}.service.candles.length")
+    check("monthly frame aggregates daily source history into fewer candles than weekly", 0 < monthly_count < weekly_count, (weekly_count, monthly_count))
+    page.get_by_role("button", name="يومي", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=\\"true\\"]')?.textContent === 'يومي' && {T}.service.candles.length >= 300", timeout=10000)
     trig = lambda name: page.get_by_role("button", name=name, exact=False).filter(has_text=name).first
     open_menu = lambda name: (trig(name).click(), page.wait_for_selector(f"#menu-{ 'indicators' if name == 'Indicators' else 'sma' }", timeout=3000))
     row = lambda attr, key: page.locator(f"[{attr}='{key}']")
@@ -241,7 +255,10 @@ with sync_playwright() as p:
     page.mouse.move(pb["x"] + pb["width"] / 2, pb["y"] + 60); page.mouse.down(); page.mouse.move(pb["x"] + pb["width"] / 2 + 120, pb["y"] + 60, steps=6); page.mouse.up(); page.wait_for_timeout(200)
     r1 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging inside the open menu does not pan the chart", abs(r0["from"] - r1["from"]) < 1e-6 and page.locator("#menu-sma").count() == 1, (r0, r1))
-    page.mouse.move(box["x"] + box["width"] * 0.6, box["y"] + 200); page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.8, box["y"] + 200, steps=6); page.mouse.up(); page.wait_for_timeout(250)
+    # Use the chart's actual vertical midpoint: the new symbol/timeframe controls make the topbar taller,
+    # so a fixed y+200 coordinate can land outside the chart on some viewport sizes.
+    drag_y = box["y"] + box["height"] * 0.5
+    page.mouse.move(box["x"] + box["width"] * 0.6, drag_y); page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.8, drag_y, steps=6); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
 
