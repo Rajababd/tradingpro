@@ -1,4 +1,4 @@
-/** Source-specific settings; DSE publishes daily history, so polling is deliberately conservative. */
+/** Chart defaults for the manual DSE historical-data workflow. */
 export const config = {
   symbol: 'DWX',
   timeframe: '1D' as const,
@@ -6,6 +6,4 @@ export const config = {
   initialBars: 300,
   olderPageBars: 150,
   loadOlderWithinBars: 20,
-  /** Re-fetch the daily history conservatively; DSE has no intraday feed wired here. */
-  pollIntervalMs: 900_000,
 } as const;
