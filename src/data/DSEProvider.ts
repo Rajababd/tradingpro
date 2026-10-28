@@ -123,7 +123,9 @@ export class DSEProvider implements MarketDataProvider {
   async fetchHistorical(request: HistoricalRequest): Promise<unknown[]> {
     const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal);
     const filtered = request.before === undefined ? bars : bars.filter((bar) => Number(bar.time) < request.before!);
-    return request.limit === undefined ? filtered : filtered.slice(-Math.max(0, request.limit));
+    if (request.limit === undefined) return filtered;
+    if (request.limit <= 0) return [];
+    return filtered.slice(-request.limit);
   }
 
   async fetchLatest(request: LatestRequest): Promise<unknown[]> {
