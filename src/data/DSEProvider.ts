@@ -134,7 +134,7 @@ export class DSEProvider implements MarketDataProvider {
   }
 
   async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal): Promise<Array<Record<string, unknown>>> {
-    const source = getSymbol(symbol);
+    getSymbol(symbol);
     const configuredBase = (import.meta as unknown as { env?: { VITE_DSE_API_BASE_URL?: string } }).env?.VITE_DSE_API_BASE_URL?.trim();
     const apiBase = configuredBase || '/api/market-data';
     const separator = apiBase.includes('?') ? '&' : '?';
