@@ -257,9 +257,31 @@ with sync_playwright() as p:
     check("M11 dragging inside the open menu does not pan the chart", abs(r0["from"] - r1["from"]) < 1e-6 and page.locator("#menu-sma").count() == 1, (r0, r1))
     # Use the chart's actual vertical midpoint: the new symbol/timeframe controls make the topbar taller,
     # so a fixed y+200 coordinate can land outside the chart on some viewport sizes.
-    drag_x = box["x"] + box["width"] * 0.25
-    drag_y = box["y"] + box["height"] * 0.75
-    page.mouse.move(drag_x, drag_y); page.mouse.down(); page.mouse.move(drag_x + box["width"] * 0.2, drag_y, steps=10); page.mouse.up(); page.wait_for_timeout(250)
+    # Find a real chart-canvas point that is inside the chart but outside the floating panel/toolbar.
+    # This avoids depending on where the topbar places the menu at a given viewport size.
+    canvas_rects = page.locator("[data-testid=chart] canvas").evaluate_all(
+        "(els) => els.map((e) => { const r = e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }).filter((r) => r.width > 300 && r.height > 100).sort((a,b) => b.width*b.height-a.width*a.height)"
+    )
+    menu_rect = page.locator("#menu-sma").bounding_box()
+    drag_point = None
+    for canvas_rect in canvas_rects:
+        for x_ratio in (0.25, 0.35, 0.45, 0.55, 0.65, 0.75):
+            for y_ratio in (0.45, 0.65, 0.8):
+                px = canvas_rect["x"] + canvas_rect["width"] * x_ratio
+                py = canvas_rect["y"] + canvas_rect["height"] * y_ratio
+                inside_menu = menu_rect and menu_rect["x"] <= px <= menu_rect["x"] + menu_rect["width"] and menu_rect["y"] <= py <= menu_rect["y"] + menu_rect["height"]
+                if not inside_menu:
+                    drag_point = (px, py, canvas_rect)
+                    break
+            if drag_point:
+                break
+        if drag_point:
+            break
+    check("M11 found an unobstructed chart canvas point for panning", drag_point is not None)
+    if drag_point:
+        px, py, canvas_rect = drag_point
+        delta = min(canvas_rect["width"] * 0.18, 180)
+        page.mouse.move(px, py); page.mouse.down(); page.mouse.move(px - delta, py, steps=10); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
 
