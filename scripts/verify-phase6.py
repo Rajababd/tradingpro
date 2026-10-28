@@ -1,6 +1,8 @@
 """Phase 6 verification: drives the REAL app UI (menus, switches, fields) in Chromium and asserts on the real chart
 and engine through the development-only `window.__tradingpro` seam. Needs the dev server on :5173."""
 import sys
+import json
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 
 URL = "http://127.0.0.1:5173/"
@@ -28,6 +30,29 @@ def new_page(browser, **ctx):
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "willReadFrequently" not in m.text else None)
+    # Mock the DSE historical endpoints for deterministic browser acceptance tests.
+    # Live endpoint access/CORS is a separate integration check.
+    daily_rows = []
+    start_date = date(2025, 1, 1)
+    for index in range(400):
+        opening = 100 + index
+        closing = opening + 0.5
+        daily_rows.append({
+            "date": (start_date + timedelta(days=index)).isoformat(),
+            "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
+            "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
+        })
+    def mock_dse(route):
+        payload = daily_rows
+        if "/index/" in route.request.url:
+            payload = [{
+                "date": row["date"], "open_val": row["open"], "max_val": row["high"],
+                "min_val": row["low"], "close_val": row["close"],
+                "traded_volume": row["volume_traded"], "value_traded": row["value_traded"],
+            } for row in daily_rows]
+            payload = {"value_and_date": payload}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+    page.route("https://dse.sy/**", mock_dse)
     page.goto(URL)
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=20000)
     page.evaluate(JS_HELPERS)
@@ -180,7 +205,22 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     # ---- M10: live updates keep everything consistent
-    page.evaluate(f"() => {{ window.__appended0 = {T}.service.getState().stats.appended; }}")
+    # DSE supplies daily history rather than a rapid intraday stream. Inject one controlled
+    # live-feed event here so this acceptance test still verifies indicator synchronization
+    # on append without making the production DSE poll interval artificially short.
+    page.evaluate(f"""() => {{
+      const service = {T}.service;
+      window.__appended0 = service.getState().stats.appended;
+      service.stopLive();
+      service.startLive({{ intervalMs: 2000, feed: {{
+        start: (handlers) => {{ window.__emitDseTestCandle = handlers.onRecords; }},
+        stop: () => {{ delete window.__emitDseTestCandle; }}
+      }} }});
+      const last = service.candles.at(-1);
+      window.__emitDseTestCandle([{{ time: last.time + 86400, open: last.close,
+        high: last.close + 1, low: last.close - 1, close: last.close + 0.5,
+        volume: 1000, valueTraded: 5000 }}]);
+    }}""")
     page.wait_for_function(f"{T}.service.getState().stats.appended >= window.__appended0 + 1", timeout=30000)
     page.wait_for_timeout(300)
     ok = ev(f"""(() => {{
