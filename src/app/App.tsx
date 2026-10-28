@@ -120,7 +120,7 @@ export function App() {
   const feed = describeFeed(state);
   const statusParts = [
     isRefreshingAll ? 'جارٍ تحديث بيانات السوق…' : state.status === 'loading' ? 'جارٍ جلب البيانات…' : '',
-    state.status === 'idle' ? 'اضغط «تحديث البيانات» لجلب الأسعار' : '',
+    state.status === 'idle' && !isRefreshingAll ? 'اضغط «تحديث البيانات» لجلب الأسعار' : '',
     state.status === 'ready' ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '') : '',
     state.status === 'error' ? 'Failed to load' : '',
     provider.lastRefreshWarning ?? '',
@@ -135,14 +135,14 @@ export function App() {
         <h1 className="brand">TradingPro</h1>
         <label className="market-select-label">
           <span className="sr-only">السهم أو المؤشر</span>
-          <select aria-label="السهم أو المؤشر" value={symbol} onChange={(event) => { setRefreshRequest(null); setSymbol(event.target.value); }}>
+          <select aria-label="السهم أو المؤشر" disabled={isRefreshingAll} value={symbol} onChange={(event) => { setRefreshRequest(null); setSymbol(event.target.value); }}>
             {DSE_SYMBOLS.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol}</option>)}
           </select>
         </label>
         <span className="market-name" title={selectedSymbol.name}>{selectedSymbol.name}</span>
         <div className="timeframe-picker" role="group" aria-label="الإطار الزمني">
           {TIMEFRAMES.map((item) => (
-            <button key={item.value} type="button" aria-pressed={timeframe === item.value}
+            <button key={item.value} type="button" disabled={isRefreshingAll} aria-pressed={timeframe === item.value}
               className={timeframe === item.value ? 'timeframe-button active' : 'timeframe-button'}
               onClick={() => { setRefreshRequest(null); setTimeframe(item.value); }}>{item.label}</button>
           ))}
