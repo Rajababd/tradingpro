@@ -1,0 +1,20 @@
+name: DSE endpoint diagnostic
+
+on:
+  push:
+    branches:
+      - feat/dse-weekly-monthly-timeframes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-endpoints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Inspect DSE endpoint reachability, JSON shape and CORS headers
+        run: python scripts/check-dse-endpoints.py
