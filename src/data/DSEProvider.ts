@@ -1,0 +1,156 @@
+import type { Candle, Timeframe } from '../types/marketData';
+import type { HistoricalRequest, LatestRequest, MarketDataProvider } from './MarketDataProvider';
+
+export const DSE_SYMBOLS = [
+  { symbol: 'DWX', name: 'Damascus Weighted Index', url: 'https://dse.sy/index/index_graph/all/DWX', kind: 'index' },
+  { symbol: 'AVOC', name: 'Avoc', url: 'https://dse.sy/issuer-company/graph/14/all/line', kind: 'equity' },
+  { symbol: 'ABC', name: 'ABC', url: 'https://dse.sy/issuer-company/graph/95/all/line', kind: 'equity' },
+  { symbol: 'BBSY', name: 'BBSY', url: 'https://dse.sy/issuer-company/graph/84/all/line', kind: 'equity' },
+  { symbol: 'NIB', name: 'NIB', url: 'https://dse.sy/issuer-company/graph/96/all/line', kind: 'equity' },
+  { symbol: 'AHT', name: 'AHT', url: 'https://dse.sy/issuer-company/graph/1/all/line', kind: 'equity' },
+] as const;
+
+type DseSymbol = (typeof DSE_SYMBOLS)[number];
+type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null };
+
+const numberOrNull = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value.replace(/,/g, ''));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const record = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+function rowsFromPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  const root = record(payload);
+  if (!root) throw new Error('DSE returned an unsupported response shape.');
+  for (const key of ['data', 'value_and_date', 'values', 'rows']) {
+    const value = root[key];
+    if (Array.isArray(value)) return value;
+    const nested = record(value);
+    if (nested) {
+      for (const nestedKey of ['value_and_date', 'data', 'values', 'rows']) {
+        if (Array.isArray(nested[nestedKey])) return nested[nestedKey] as unknown[];
+      }
+    }
+  }
+  throw new Error('DSE response did not contain a historical data array.');
+}
+
+function parseDailyRow(raw: unknown): DailyRow | null {
+  const row = record(raw);
+  if (!row) return null;
+  const rawDate = row.date ?? row.trading_date ?? row.timestamp;
+  if (typeof rawDate !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(rawDate)) return null;
+  const date = rawDate.slice(0, 10);
+  const close = numberOrNull(row.close ?? row.close_val ?? row.value ?? row.average_price);
+  const open = numberOrNull(row.open ?? row.open_val);
+  const high = numberOrNull(row.high ?? row.max_val);
+  const low = numberOrNull(row.low ?? row.min_val);
+  // Do not fabricate OHLC values from a close-only index point.
+  if (open === null || high === null || low === null || close === null) return null;
+  return {
+    date,
+    open,
+    high,
+    low,
+    close,
+    volume: numberOrNull(row.volume_traded ?? row.traded_volume ?? row.volume),
+    valueTraded: numberOrNull(row.value_traded ?? row.traded_value ?? row.valueTraded),
+  };
+}
+
+function dateSeconds(date: string): number {
+  return Math.floor(Date.parse(`${date}T00:00:00Z`) / 1000);
+}
+
+function periodKey(date: string, timeframe: Timeframe): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (timeframe === '1D') return date;
+  if (timeframe === '1M') return `${date.slice(0, 7)}-01`;
+  // ISO-like Monday-starting trading week; the candle timestamp remains the first actual session.
+  const weekday = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - weekday);
+  return d.toISOString().slice(0, 10);
+}
+
+function aggregateDaily(rows: readonly DailyRow[], timeframe: Timeframe): Array<Record<string, unknown>> {
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  if (timeframe === '1D') {
+    return sorted.map((r) => ({
+      time: dateSeconds(r.date), open: r.open, high: r.high, low: r.low, close: r.close,
+      volume: r.volume, valueTraded: r.valueTraded,
+    }));
+  }
+
+  const buckets = new Map<string, { first: DailyRow; last: DailyRow; high: number; low: number; volume: number | null; valueTraded: number | null }>();
+  for (const row of sorted) {
+    const key = periodKey(row.date, timeframe);
+    const existing = buckets.get(key);
+    if (!existing) {
+      buckets.set(key, { first: row, last: row, high: row.high, low: row.low, volume: row.volume, valueTraded: row.valueTraded });
+    } else {
+      existing.last = row;
+      existing.high = Math.max(existing.high, row.high);
+      existing.low = Math.min(existing.low, row.low);
+      existing.volume = existing.volume === null || row.volume === null ? null : existing.volume + row.volume;
+      existing.valueTraded = existing.valueTraded === null || row.valueTraded === null ? null : existing.valueTraded + row.valueTraded;
+    }
+  }
+  return [...buckets.values()].map((b) => ({
+    // Anchor weekly/monthly bars to the first actual trading session, not a weekend/calendar date.
+    time: dateSeconds(b.first.date), open: b.first.open, high: b.high, low: b.low, close: b.last.close,
+    volume: b.volume, valueTraded: b.valueTraded,
+  }));
+}
+
+function getSymbol(symbol: string): DseSymbol {
+  const found = DSE_SYMBOLS.find((item) => item.symbol === symbol);
+  if (!found) throw new Error(`Unsupported DSE symbol "${symbol}".`);
+  return found;
+}
+
+export class DSEProvider implements MarketDataProvider {
+  readonly id = 'dse';
+  readonly displayName = 'Damascus Securities Exchange';
+  readonly isSimulated = false;
+
+  async fetchHistorical(request: HistoricalRequest): Promise<unknown[]> {
+    const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal);
+    const filtered = request.before === undefined ? bars : bars.filter((bar) => Number(bar.time) < request.before!);
+    return request.limit === undefined ? filtered : filtered.slice(-Math.max(0, request.limit));
+  }
+
+  async fetchLatest(request: LatestRequest): Promise<unknown[]> {
+    const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal);
+    return bars.slice(-1);
+  }
+
+  async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal): Promise<Array<Record<string, unknown>>> {
+    const source = getSymbol(symbol);
+    let response: Response;
+    try {
+      response = await fetch(source.url, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw new Error(`Cannot reach DSE data endpoint for ${symbol}. The browser may be blocking cross-origin requests (CORS); a same-origin proxy would then be required.`);
+    }
+    if (!response.ok) throw new Error(`DSE request for ${symbol} failed with HTTP ${response.status}.`);
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error(`DSE returned non-JSON data for ${symbol}.`);
+    }
+    const daily = rowsFromPayload(payload).map(parseDailyRow).filter((row): row is DailyRow => row !== null);
+    if (daily.length === 0) {
+      throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
+    }
+    return aggregateDaily(daily, timeframe);
+  }
+}
