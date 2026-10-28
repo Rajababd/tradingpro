@@ -26,7 +26,7 @@ const TIMEFRAMES: readonly { value: Timeframe; label: string }[] = [
 
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [attempt, setAttempt] = useState(0);
+  const [refreshRequest, setRefreshRequest] = useState<{ symbol: string; timeframe: Timeframe; nonce: number } | null>(null);
   const [symbol, setSymbol] = useState<string>(config.symbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(config.timeframe);
   const provider = useMemo(() => new DSEProvider(), []);
@@ -66,23 +66,22 @@ export function App() {
     const drawingEvents = ['drawing:added', 'drawing:removed', 'drawing:cleared', 'drawing:updated', 'drawing:edit-finished'];
     const unsubscribeDrawingEvents = drawingEvents.map((event) => chart.drawings.on(event, persistDrawings));
 
-    void service.load({ symbol, timeframe, limit: config.initialBars }).then(() => {
-      if (cancelled || service.getState().status !== 'ready') return;
-      try {
-        const saved = loadDrawings(window.localStorage, storageKey);
-        if (saved !== null) {
-          restoringDrawings = true;
-          chart.drawings.import(saved);
+    if (refreshRequest?.symbol === symbol && refreshRequest.timeframe === timeframe) {
+      void service.load({ symbol, timeframe, limit: config.initialBars }).then(() => {
+        if (cancelled || service.getState().status !== 'ready') return;
+        try {
+          const saved = loadDrawings(window.localStorage, storageKey);
+          if (saved !== null) {
+            restoringDrawings = true;
+            chart.drawings.import(saved);
+            restoringDrawings = false;
+          }
+        } catch {
           restoringDrawings = false;
         }
-      } catch {
-        restoringDrawings = false;
-      }
-      persistenceReady = true;
-      // DSE exposes daily history, not an intraday stream. Poll conservatively and aggregate
-      // the latest daily history into the selected chart timeframe.
-      service.startLive({ intervalMs: config.pollIntervalMs });
-    });
+        persistenceReady = true;
+      });
+    }
 
     return () => {
       cancelled = true;
@@ -97,11 +96,12 @@ export function App() {
       chart.dispose();
       setSession(null);
     };
-  }, [attempt, provider, symbol, timeframe]);
+  }, [provider, symbol, timeframe, refreshRequest]);
 
   const feed = describeFeed(state);
   const statusParts = [
-    state.status === 'loading' || state.status === 'idle' ? 'Loading…' : '',
+    state.status === 'loading' ? 'جارٍ جلب البيانات…' : '',
+    state.status === 'idle' ? 'اضغط «تحديث البيانات» لجلب الأسعار' : '',
     state.status === 'ready' ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '') : '',
     state.status === 'error' ? 'Failed to load' : '',
     feed.label,
@@ -115,7 +115,7 @@ export function App() {
         <h1 className="brand">TradingPro</h1>
         <label className="market-select-label">
           <span className="sr-only">السهم أو المؤشر</span>
-          <select aria-label="السهم أو المؤشر" value={symbol} onChange={(event) => setSymbol(event.target.value)}>
+          <select aria-label="السهم أو المؤشر" value={symbol} onChange={(event) => { setRefreshRequest(null); setSymbol(event.target.value); }}>
             {DSE_SYMBOLS.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol}</option>)}
           </select>
         </label>
@@ -124,9 +124,10 @@ export function App() {
           {TIMEFRAMES.map((item) => (
             <button key={item.value} type="button" aria-pressed={timeframe === item.value}
               className={timeframe === item.value ? 'timeframe-button active' : 'timeframe-button'}
-              onClick={() => setTimeframe(item.value)}>{item.label}</button>
+              onClick={() => { setRefreshRequest(null); setTimeframe(item.value); }}>{item.label}</button>
           ))}
         </div>
+        <button type="button" className="refresh-button" disabled={state.status === 'loading'} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>{state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}</button>
         <TopBarMenus workspace={session?.workspace ?? null} />
         <DrawingToolbar controller={session?.chart.drawings ?? null} />
         {state.source.isSimulated && <span className="badge-simulated" title={state.source.displayName}>SIMULATED DATA</span>}
@@ -138,7 +139,7 @@ export function App() {
         {state.status === 'error' && (
           <div className="overlay" role="alert">
             <p>{state.error}</p>
-            <button type="button" onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+            <button type="button" onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>إعادة المحاولة</button>
           </div>
         )}
       </main>
