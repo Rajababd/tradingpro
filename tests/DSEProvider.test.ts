@@ -21,7 +21,7 @@ describe('DSEProvider', () => {
       open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000,
     });
     expect(fetch).toHaveBeenCalledWith(
-      'https://dse.sy/issuer-company/graph/84/all/line',
+      '/api/market-data?symbol=BBSY',
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
     );
   });
