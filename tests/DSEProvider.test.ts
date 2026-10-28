@@ -142,9 +142,26 @@ describe('DSEProvider', () => {
     expect(provider.lastRefreshWarning).toMatch(/استُبعدت سجلات OHLC غير صالحة/);
   });
 
-  it('rejects malformed OHLC relationships before caching them', async () => {
+  it('repairs inconsistent high/low values using only prices supplied by DSE', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([
+      { date: '2026-01-26', open: '10', high: '8', low: '9', close: '11', volume_traded: '25' },
+      { date: '2026-01-27', open: '12', high: '15', low: '14', close: '13' },
+      { date: '2026-01-28', open: '8', high: '9', low: '10', close: '7' },
+    ]), { status: 200 })));
+    const bars = await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    expect(bars).toHaveLength(3);
+    expect(bars[0]).toMatchObject({ open: 10, high: 11, low: 9, close: 11, volume: 25 });
+    expect(bars[1]).toMatchObject({ open: 12, high: 15, low: 12, close: 13 });
+    expect(bars[2]).toMatchObject({ open: 8, high: 9, low: 7, close: 7 });
+    for (const bar of bars) {
+      expect(Number(bar.high)).toBeGreaterThanOrEqual(Math.max(Number(bar.open), Number(bar.close), Number(bar.low)));
+      expect(Number(bar.low)).toBeLessThanOrEqual(Math.min(Number(bar.open), Number(bar.close), Number(bar.high)));
+    }
+  });
+
+  it('still rejects missing or non-positive OHLC values instead of inventing prices', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify([
-      { date: '2026-01-26', open: '10', high: '8', low: '9', close: '11' },
+      { date: '2026-01-26', open: '10', high: '', low: '9', close: '11' },
     ]), { status: 200 })));
     await expect(new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true }))
       .rejects.toThrow(/no usable OHLC rows/i);
