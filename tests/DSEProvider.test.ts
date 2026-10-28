@@ -62,4 +62,39 @@ describe('DSEProvider', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 })));
     expect(await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', limit: 0 })).toEqual([]);
   });
+  
+  it('reuses cached daily history for timeframe changes without another network request', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new DSEProvider();
+    await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    const weekly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1W' });
+    const monthly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1M' });
+    expect(weekly).toHaveLength(2);
+    expect(monthly).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the previous cached history if an explicit refresh fails', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(dailyRows), { status: 200 }))
+      .mockResolvedValueOnce(new Response('upstream unavailable', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new DSEProvider();
+    const fresh = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    const afterFailedRefresh = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    expect(afterFailedRefresh).toEqual(fresh);
+    expect(provider.lastRefreshWarning).toMatch(/تعذّر تحديث BBSY/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
