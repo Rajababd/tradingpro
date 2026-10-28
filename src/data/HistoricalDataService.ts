@@ -33,7 +33,8 @@ export async function loadHistoricalCandles(
     raw = await provider.fetchHistorical(request);
   } catch (cause) {
     if (request.signal?.aborted) throw cause; // cancellation is not a data error
-    throw new DataLoadError(`Could not fetch data from ${provider.displayName}.`, [], { cause });
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new DataLoadError(`Could not fetch data from ${provider.displayName}: ${detail}`, [], { cause });
   }
 
   if (!Array.isArray(raw)) {
