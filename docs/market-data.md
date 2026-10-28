@@ -24,8 +24,24 @@ Providers return **raw `unknown[]`**. They parse their own wire format (numeric 
 may not skip validation: the service always validates. Provider-specific details (auth, rate limits, the
 right polling interval) belong in the provider and `src/app/config.ts`, never in the chart or service.
 
-**Damascus Securities Exchange:** no provider exists and no endpoint is assumed. An authorized provider can be
-added by implementing this interface once the data source and its terms are verified.
+**Damascus Securities Exchange (`src/data/DSEProvider.ts`):** the app is configured for the DSE endpoints currently mapped in
+the provider: DWX, AVOC, ABC, BBSY, NIB and AHT. The provider fetches historical **daily** records and converts numeric
+strings and date fields at the source boundary. The index endpoint may use a wrapped payload (`value_and_date`), while
+issuer endpoints may return a direct array or a `data` array. Unsupported payloads and rows without a full OHLC tuple
+fail clearly; the provider does not fabricate open/high/low values from a close-only point.
+
+The chart's **1D / 1W / 1M** selector is a display aggregation, not a request for intraday/weekly/monthly source data:
+weekly bars combine daily sessions into Monday-starting trading weeks; monthly bars combine sessions by calendar month.
+For each bucket, open is the first session's open, close the last session's close, high/low are extrema, and volume and
+traded value are summed only when every contributing daily value is present. The candle timestamp is the first actual
+trading session in the bucket, avoiding synthetic weekend timestamps. Selecting a different symbol or timeframe reloads
+the series and restores drawings from that symbol/timeframe's separate storage key.
+
+The DSE feed is polled every five minutes because the wired source is historical daily data, not an intraday stream.
+Direct browser access depends on DSE allowing cross-origin requests (CORS). If the browser blocks these requests, a
+same-origin server/proxy is required; this client-only change does not silently bypass that browser security boundary.
+The endpoint schemas and live CORS behavior must be verified in the deployed browser before considering the integration
+production-ready.
 
 ## Update policy (`CandleStore`)
 | Incoming candle | Result |
