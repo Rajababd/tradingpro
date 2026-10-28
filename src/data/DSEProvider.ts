@@ -120,8 +120,13 @@ export class DSEProvider implements MarketDataProvider {
   readonly displayName = 'Damascus Securities Exchange';
   readonly isSimulated = false;
 
+  hasCachedData(symbol: string): boolean {
+    getSymbol(symbol);
+    return this.#readCachedDaily(symbol) !== null;
+  }
+
   async fetchHistorical(request: HistoricalRequest): Promise<unknown[]> {
-    const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal);
+    const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal, request.refresh === true);
     const filtered = request.before === undefined ? bars : bars.filter((bar) => Number(bar.time) < request.before!);
     if (request.limit === undefined) return filtered;
     if (request.limit <= 0) return [];
@@ -129,12 +134,40 @@ export class DSEProvider implements MarketDataProvider {
   }
 
   async fetchLatest(request: LatestRequest): Promise<unknown[]> {
-    const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal);
+    const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal, false);
     return bars.slice(-1);
   }
 
-  async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal): Promise<Array<Record<string, unknown>>> {
+  #cacheKey(symbol: string): string {
+    return `tradingpro:dse:daily:v1:${symbol}`;
+  }
+
+  #readCachedDaily(symbol: string): DailyRow[] | null {
+    try {
+      const raw = window.localStorage.getItem(this.#cacheKey(symbol));
+      if (raw === null) return null;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return null;
+      const rows = parsed.map(parseDailyRow).filter((row): row is DailyRow => row !== null);
+      return rows.length > 0 ? rows.sort((a, b) => a.date.localeCompare(b.date)) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  #writeCachedDaily(symbol: string, rows: readonly DailyRow[]): void {
+    try {
+      window.localStorage.setItem(this.#cacheKey(symbol), JSON.stringify(rows));
+    } catch {
+      // Storage can be disabled or full; in-memory charting should still work.
+    }
+  }
+
+  async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal, refresh = false): Promise<Array<Record<string, unknown>>> {
     getSymbol(symbol);
+    const cached = this.#readCachedDaily(symbol);
+    if (!refresh && cached !== null) return aggregateDaily(cached, timeframe);
+    if (!refresh) throw new Error(`No cached data for ${symbol}. Click «تحديث البيانات» to fetch history.`);
     const configuredBase = (import.meta as unknown as { env?: { VITE_DSE_API_BASE_URL?: string } }).env?.VITE_DSE_API_BASE_URL?.trim();
     const apiBase = configuredBase || '/api/market-data';
     const separator = apiBase.includes('?') ? '&' : '?';
@@ -161,6 +194,9 @@ export class DSEProvider implements MarketDataProvider {
     if (daily.length === 0) {
       throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
     }
-    return aggregateDaily(daily, timeframe);
+    const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
+    // Commit to cache only after a non-empty, parseable history response is confirmed.
+    this.#writeCachedDaily(symbol, sortedDaily);
+    return aggregateDaily(sortedDaily, timeframe);
   }
 }
