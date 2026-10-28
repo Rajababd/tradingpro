@@ -22,6 +22,14 @@ const numberOrNull = (value: unknown): number | null => {
   return null;
 };
 
+const firstNumber = (...values: unknown[]): number | null => {
+  for (const value of values) {
+    const parsed = numberOrNull(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
 const record = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
@@ -49,15 +57,15 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   if (typeof rawDate !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(rawDate)) return null;
   const date = rawDate.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return null;
-  const close = numberOrNull(row.close ?? row.close_val ?? row.value ?? row.average_price);
-  const open = numberOrNull(row.open ?? row.open_val);
-  const high = numberOrNull(row.high ?? row.max_val);
-  const low = numberOrNull(row.low ?? row.min_val);
+  const close = firstNumber(row.close, row.close_val, row.value, row.average_price);
+  const open = firstNumber(row.open, row.open_val);
+  const high = firstNumber(row.high, row.max_val);
+  const low = firstNumber(row.low, row.min_val);
   // Do not fabricate OHLC values from a close-only index point.
   if (open === null || high === null || low === null || close === null) return null;
   if (high < low || high < open || high < close || low > open || low > close) return null;
-  const volume = numberOrNull(row.volume_traded ?? row.traded_volume ?? row.volume);
-  const valueTraded = numberOrNull(row.value_traded ?? row.traded_value ?? row.valueTraded);
+  const volume = firstNumber(row.volume_traded, row.traded_volume, row.volume);
+  const valueTraded = firstNumber(row.value_traded, row.traded_value, row.valueTraded);
   if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
   return {
     date,
