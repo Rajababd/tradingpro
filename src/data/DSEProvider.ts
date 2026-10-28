@@ -48,7 +48,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   const rawDate = row.date ?? row.trading_date ?? row.timestamp;
   if (typeof rawDate !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(rawDate)) return null;
   const date = rawDate.slice(0, 10);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return null;
   const close = numberOrNull(row.close ?? row.close_val ?? row.value ?? row.average_price);
   const open = numberOrNull(row.open ?? row.open_val);
   const high = numberOrNull(row.high ?? row.max_val);
