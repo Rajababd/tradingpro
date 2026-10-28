@@ -63,6 +63,25 @@ describe('DSEProvider', () => {
     expect(await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', limit: 0, refresh: true })).toEqual([]);
   });
   
+  it('refreshes all configured symbols on demand so symbol switching can use cached data', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new DSEProvider();
+    const result = await provider.refreshAll();
+    expect(result.refreshed).toEqual(['DWX', 'AVOC', 'ABC', 'BBSY', 'NIB', 'AHT']);
+    expect(result.failed).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(provider.hasCachedData('DWX')).toBe(true);
+    expect(provider.hasCachedData('AHT')).toBe(true);
+    await provider.fetchHistorical({ symbol: 'AHT', timeframe: '1M' });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
   it('reuses cached daily history for timeframe changes without another network request', async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('window', { localStorage: {
