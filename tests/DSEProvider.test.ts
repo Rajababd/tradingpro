@@ -113,6 +113,16 @@ describe('DSEProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back to alternate DSE fields when the preferred field is an empty string', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify([{
+      date: '2026-01-26', open: '', open_val: '10', high: '', max_val: '12',
+      low: '', min_val: '9', close: '', close_val: '11', volume_traded: '', traded_volume: '100',
+    }]), { status: 200 })));
+    const bars = await new DSEProvider().fetchHistorical({ symbol: 'DWX', timeframe: '1D', refresh: true });
+    expect(bars).toHaveLength(1);
+    expect(bars[0]).toMatchObject({ open: 10, high: 12, low: 9, close: 11, volume: 100 });
+  });
+
   it('rejects malformed OHLC relationships before caching them', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify([
       { date: '2026-01-26', open: '10', high: '8', low: '9', close: '11' },
