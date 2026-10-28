@@ -33,7 +33,7 @@ with sync_playwright() as p:
             })
         def mock_dse(route):
             payload = daily_rows
-            if "/index/" in route.request.url:
+            if "symbol=DWX" in route.request.url:
                 payload = [{
                     "date": row["date"], "open_val": row["open"], "max_val": row["high"],
                     "min_val": row["low"], "close_val": row["close"],
@@ -41,10 +41,11 @@ with sync_playwright() as p:
                 } for row in daily_rows]
                 payload = {"value_and_date": payload}
             route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
-        page.route("https://dse.sy/**", mock_dse)
+        page.route("**/api/market-data**", mock_dse)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(URL)
+        page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
@@ -184,6 +185,7 @@ with sync_playwright() as p:
         expected_drawings = export_drawings()
         page.wait_for_timeout(350)  # debounce window is 150 ms
         page.reload()
+        page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         try:
             page.wait_for_function(
