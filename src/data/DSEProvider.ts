@@ -48,20 +48,25 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   const rawDate = row.date ?? row.trading_date ?? row.timestamp;
   if (typeof rawDate !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(rawDate)) return null;
   const date = rawDate.slice(0, 10);
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return null;
   const close = numberOrNull(row.close ?? row.close_val ?? row.value ?? row.average_price);
   const open = numberOrNull(row.open ?? row.open_val);
   const high = numberOrNull(row.high ?? row.max_val);
   const low = numberOrNull(row.low ?? row.min_val);
   // Do not fabricate OHLC values from a close-only index point.
   if (open === null || high === null || low === null || close === null) return null;
+  if (high < low || high < open || high < close || low > open || low > close) return null;
+  const volume = numberOrNull(row.volume_traded ?? row.traded_volume ?? row.volume);
+  const valueTraded = numberOrNull(row.value_traded ?? row.traded_value ?? row.valueTraded);
+  if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
   return {
     date,
     open,
     high,
     low,
     close,
-    volume: numberOrNull(row.volume_traded ?? row.traded_volume ?? row.volume),
-    valueTraded: numberOrNull(row.value_traded ?? row.traded_value ?? row.valueTraded),
+    volume,
+    valueTraded,
   };
 }
 
@@ -121,6 +126,8 @@ export class DSEProvider implements MarketDataProvider {
   readonly isSimulated = false;
   /** Non-fatal refresh warning shown when stale cached data is kept after a failed refresh. */
   lastRefreshWarning: string | null = null;
+  /** In-memory fallback also keeps this provider usable if browser storage is unavailable/full. */
+  readonly #memoryCache = new Map<string, DailyRow[]>();
 
   hasCachedData(symbol: string): boolean {
     getSymbol(symbol);
@@ -164,21 +171,27 @@ export class DSEProvider implements MarketDataProvider {
   }
 
   #readCachedDaily(symbol: string): DailyRow[] | null {
+    const memory = this.#memoryCache.get(symbol);
+    if (memory && memory.length > 0) return [...memory];
     try {
       const raw = window.localStorage.getItem(this.#cacheKey(symbol));
       if (raw === null) return null;
       const parsed: unknown = JSON.parse(raw);
       if (!Array.isArray(parsed)) return null;
-      const rows = parsed.map(parseDailyRow).filter((row): row is DailyRow => row !== null);
-      return rows.length > 0 ? rows.sort((a, b) => a.date.localeCompare(b.date)) : null;
+      const rows = parsed.map(parseDailyRow).filter((row): row is DailyRow => row !== null).sort((a, b) => a.date.localeCompare(b.date));
+      if (rows.length === 0) return null;
+      this.#memoryCache.set(symbol, rows);
+      return [...rows];
     } catch {
       return null;
     }
   }
 
   #writeCachedDaily(symbol: string, rows: readonly DailyRow[]): void {
+    const snapshot = [...rows];
+    this.#memoryCache.set(symbol, snapshot);
     try {
-      window.localStorage.setItem(this.#cacheKey(symbol), JSON.stringify(rows));
+      window.localStorage.setItem(this.#cacheKey(symbol), JSON.stringify(snapshot));
     } catch {
       // Storage can be disabled or full; in-memory charting should still work.
     }
