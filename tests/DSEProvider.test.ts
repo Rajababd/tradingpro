@@ -99,6 +99,28 @@ describe('DSEProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps refreshed history in memory if localStorage is unavailable', async () => {
+    vi.stubGlobal('window', { localStorage: {
+      getItem: () => { throw new Error('storage disabled'); },
+      setItem: () => { throw new Error('storage full'); },
+    } });
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(dailyRows), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new DSEProvider();
+    await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    const monthly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1M' });
+    expect(monthly).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed OHLC relationships before caching them', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify([
+      { date: '2026-01-26', open: '10', high: '8', low: '9', close: '11' },
+    ]), { status: 200 })));
+    await expect(new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true }))
+      .rejects.toThrow(/no usable OHLC rows/i);
+  });
+
   it('keeps the previous cached history if an explicit refresh fails', async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('window', { localStorage: {
