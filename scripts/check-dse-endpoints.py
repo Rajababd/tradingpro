@@ -35,6 +35,33 @@ def extract_rows(payload):
     return None
 
 
+def parseable_ohlc_rows(rows):
+    if not rows:
+        return 0
+    count = 0
+    def numeric(value):
+        try:
+            return float(str(value).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        date = row.get("date") or row.get("trading_date") or row.get("timestamp")
+        if not isinstance(date, str) or len(date) < 10:
+            continue
+        open_price = numeric(row.get("open", row.get("open_val")))
+        high = numeric(row.get("high", row.get("max_val")))
+        low = numeric(row.get("low", row.get("min_val")))
+        close = numeric(row.get("close", row.get("close_val", row.get("value", row.get("average_price")))))
+        if None in (open_price, high, low, close):
+            continue
+        if high < max(open_price, close, low) or low > min(open_price, close):
+            continue
+        count += 1
+    return count
+
+
 for symbol, url in ENDPOINTS.items():
     print(f"\n[{symbol}] {url}")
     request = urllib.request.Request(
@@ -63,8 +90,12 @@ for symbol, url in ENDPOINTS.items():
             rows = extract_rows(payload)
             print(f"Root shape: {'array' if isinstance(payload, list) else type(payload).__name__}")
             print(f"Historical rows: {len(rows) if rows is not None else '(no recognized array)'}")
+            valid_ohlc = parseable_ohlc_rows(rows)
+            print(f"Rows with parseable, internally consistent OHLC: {valid_ohlc}")
             if rows and isinstance(rows[0], dict):
                 print("First row keys: " + ", ".join(sorted(rows[0].keys())))
+            if valid_ohlc == 0:
+                raise SystemExit(f"{symbol}: endpoint returned no parseable OHLC candles")
     except urllib.error.HTTPError as error:
         print(f"HTTP: {error.code}")
         print(f"Content-Type: {error.headers.get('Content-Type', '(missing)')}")
