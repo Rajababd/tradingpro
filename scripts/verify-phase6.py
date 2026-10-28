@@ -44,7 +44,7 @@ def new_page(browser, **ctx):
         })
     def mock_dse(route):
         payload = daily_rows
-        if "/index/" in route.request.url:
+        if "symbol=DWX" in route.request.url:
             payload = [{
                 "date": row["date"], "open_val": row["open"], "max_val": row["high"],
                 "min_val": row["low"], "close_val": row["close"],
@@ -52,8 +52,9 @@ def new_page(browser, **ctx):
             } for row in daily_rows]
             payload = {"value_and_date": payload}
         route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
-    page.route("https://dse.sy/**", mock_dse)
+    page.route("**/api/market-data**", mock_dse)
     page.goto(URL)
+    page.get_by_role("button", name="تحديث البيانات").click()
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=20000)
     page.evaluate(JS_HELPERS)
     page.wait_for_timeout(400)
@@ -68,14 +69,17 @@ with sync_playwright() as p:
     timeframe_buttons = page.locator(".timeframe-button")
     check("DSE UI exposes daily, weekly and monthly display frames", timeframe_buttons.count() == 3)
     page.get_by_role("button", name="أسبوعي", exact=True).click()
+    page.get_by_role("button", name="تحديث البيانات").click()
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'أسبوعي'", timeout=10000)
     weekly_count = ev(f"{T}.service.candles.length")
     check("weekly frame aggregates daily source history into fewer candles", 0 < weekly_count < daily_count, (daily_count, weekly_count))
     page.get_by_role("button", name="شهري", exact=True).click()
+    page.get_by_role("button", name="تحديث البيانات").click()
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'شهري'", timeout=10000)
     monthly_count = ev(f"{T}.service.candles.length")
     check("monthly frame aggregates daily source history into fewer candles than weekly", 0 < monthly_count < weekly_count, (weekly_count, monthly_count))
     page.get_by_role("button", name="يومي", exact=True).click()
+    page.get_by_role("button", name="تحديث البيانات").click()
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'يومي' && {T}.service.candles.length >= 300", timeout=10000)
     trig = lambda name: page.get_by_role("button", name=name, exact=False).filter(has_text=name).first
     open_menu = lambda name: (trig(name).click(), page.wait_for_selector(f"#menu-{ 'indicators' if name == 'Indicators' else 'sma' }", timeout=3000))
