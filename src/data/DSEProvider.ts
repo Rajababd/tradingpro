@@ -135,14 +135,22 @@ export class DSEProvider implements MarketDataProvider {
 
   async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal): Promise<Array<Record<string, unknown>>> {
     const source = getSymbol(symbol);
+    const configuredBase = (import.meta as unknown as { env?: { VITE_DSE_API_BASE_URL?: string } }).env?.VITE_DSE_API_BASE_URL?.trim();
+    const apiBase = configuredBase || '/api/market-data';
+    const separator = apiBase.includes('?') ? '&' : '?';
+    const endpoint = `${apiBase}${separator}symbol=${encodeURIComponent(symbol)}`;
     let response: Response;
     try {
-      response = await fetch(source.url, { method: 'GET', headers: { Accept: 'application/json' }, ...(signal === undefined ? {} : { signal }) });
+      response = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, ...(signal === undefined ? {} : { signal }) });
     } catch (error) {
       if (signal?.aborted) throw error;
-      throw new Error(`Cannot reach DSE data endpoint for ${symbol}. The browser may be blocking cross-origin requests (CORS); a same-origin proxy would then be required.`);
+      throw new Error(`Cannot reach the TradingPro market-data API for ${symbol}. Check that the proxy backend is running and VITE_DSE_API_BASE_URL is configured for deployment.`);
     }
-    if (!response.ok) throw new Error(`DSE request for ${symbol} failed with HTTP ${response.status}.`);
+    if (!response.ok) {
+      let detail = '';
+      try { detail = (await response.text()).slice(0, 180); } catch { /* response body may be unavailable */ }
+      throw new Error(`Market-data API request for ${symbol} failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}.`);
+    }
     let payload: unknown;
     try {
       payload = await response.json();
