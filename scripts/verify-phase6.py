@@ -60,7 +60,8 @@ def new_page(browser, **ctx):
     page.wait_for_timeout(200)
     check("manual refresh: initial page load makes no market-data request", len(requested_urls) == 0, requested_urls)
     page.get_by_role("button", name="تحديث البيانات").click()
-    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=20000)
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=30000)
+    check("manual refresh: fetches each configured symbol once", len(requested_urls) == 6 and {url.split("symbol=")[-1] for url in requested_urls} == {"DWX", "AVOC", "ABC", "BBSY", "NIB", "AHT"}, requested_urls)
     page.evaluate(JS_HELPERS)
     page.wait_for_timeout(400)
     return page, errors
@@ -75,7 +76,7 @@ with sync_playwright() as p:
     check("DSE UI exposes daily, weekly and monthly display frames", timeframe_buttons.count() == 3)
     page.get_by_role("button", name="أسبوعي", exact=True).click()
     page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'أسبوعي'", timeout=10000)
-    check("cached daily data: changing to weekly makes no network request", len(requested_urls) == 1, requested_urls)
+    check("cached daily data: changing to weekly makes no network request", len(requested_urls) == 6, requested_urls)
     weekly_count = ev(f"{T}.service.candles.length")
     check("weekly frame aggregates daily source history into fewer candles", 0 < weekly_count < daily_count, (daily_count, weekly_count))
     page.get_by_role("button", name="شهري", exact=True).click()
