@@ -1,4 +1,4 @@
-import type { Candle, Timeframe } from '../types/marketData';
+import type { Timeframe } from '../types/marketData';
 import type { HistoricalRequest, LatestRequest, MarketDataProvider } from './MarketDataProvider';
 
 export const DSE_SYMBOLS = [
