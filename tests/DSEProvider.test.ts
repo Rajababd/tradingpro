@@ -73,8 +73,8 @@ describe('DSEProvider', () => {
     vi.stubGlobal('fetch', fetchMock);
     const provider = new DSEProvider();
     await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
-    const weekly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1W', refresh: true });
-    const monthly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1M', refresh: true });
+    const weekly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1W' });
+    const monthly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1M' });
     expect(weekly).toHaveLength(2);
     expect(monthly).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
