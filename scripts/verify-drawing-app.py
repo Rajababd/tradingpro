@@ -155,6 +155,43 @@ with sync_playwright() as p:
             if committed:
                 check(f"{mode}: {tool_label} exits after completion",
                       tool_button.get_attribute("aria-pressed") == "false")
+        # Verify the autosaved drawings survive a full page reload.
+        expected_drawings = export_drawings()
+        page.wait_for_timeout(350)  # debounce window is 150 ms
+        page.reload()
+        page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
+        try:
+            page.wait_for_function(
+                "expected => window.__tradingpro.chart.drawings.export().length === expected",
+                arg=len(expected_drawings),
+                timeout=6000,
+            )
+            restored_drawings = export_drawings()
+            check(f"{mode}: drawings restore after page reload",
+                  len(restored_drawings) == len(expected_drawings),
+                  f"expected={len(expected_drawings)}, restored={len(restored_drawings)}")
+            check(f"{mode}: restored drawing IDs and types match",
+                  [(d.get("id"), d.get("type")) for d in restored_drawings] ==
+                  [(d.get("id"), d.get("type")) for d in expected_drawings])
+        except Exception as error:
+            check(f"{mode}: drawings restore after page reload", False, str(error))
+            print(f"DEBUG {mode}: expected persisted drawings={expected_drawings}")
+            print(f"DEBUG {mode}: restored drawings={export_drawings()}")
+        # A cleared drawing set must remain empty after debounce and reload.
+        clear_button = page.get_by_role("button", name="Clear drawings")
+        clear_button.click()
+        try:
+            page.wait_for_function("window.__tradingpro.chart.drawings.export().length === 0", timeout=3000)
+            check(f"{mode}: clear drawings removes all drawings", len(export_drawings()) == 0)
+            page.wait_for_timeout(350)  # allow the debounced empty state to be persisted
+            page.reload()
+            page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
+            page.wait_for_timeout(400)  # allow asynchronous restoration to complete
+            check(f"{mode}: cleared drawings stay cleared after reload", len(export_drawings()) == 0,
+                  f"restored={export_drawings()}")
+        except Exception as error:
+            check(f"{mode}: cleared drawings stay cleared after reload", False, str(error))
+            print(f"DEBUG {mode}: drawings after clear/reload={export_drawings()}")
         check(f"{mode}: no browser exceptions", not errors, repr(errors))
         context.close()
     browser.close()
