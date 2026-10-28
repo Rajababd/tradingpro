@@ -36,7 +36,7 @@ def extract_rows(payload):
 
 
 def ohlc_stats(rows):
-    stats = {"valid": 0, "missing_or_unparseable": 0, "inconsistent": 0}
+    stats = {"valid": 0, "missing_or_unparseable": 0, "inconsistent": 0, "examples": []}
     def numeric(value):
         try:
             text = str(value).replace(",", "").strip()
@@ -63,6 +63,13 @@ def ohlc_stats(rows):
             continue
         if high < max(open_price, close, low) or low > min(open_price, close):
             stats["inconsistent"] += 1
+            if len(stats["examples"]) < 2:
+                stats["examples"].append({
+                    "date": date[:10], "open": open_price, "high": high,
+                    "low": low, "close": close,
+                    "average_price": row.get("average_price"),
+                    "reference_price": row.get("reference_price"),
+                })
             continue
         stats["valid"] += 1
     return stats
@@ -98,6 +105,8 @@ for symbol, url in ENDPOINTS.items():
             print(f"Historical rows: {len(rows) if rows is not None else '(no recognized array)'}")
             stats = ohlc_stats(rows)
             print(f"OHLC rows: {stats['valid']} valid; {stats['missing_or_unparseable']} missing/unparseable; {stats['inconsistent']} internally inconsistent")
+            for example in stats["examples"]:
+                print(f"Inconsistent sample: {example}")
             if rows and isinstance(rows[0], dict):
                 print("First row keys: " + ", ".join(sorted(rows[0].keys())))
             if stats["valid"] == 0:
