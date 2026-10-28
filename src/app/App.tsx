@@ -27,6 +27,7 @@ const TIMEFRAMES: readonly { value: Timeframe; label: string }[] = [
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [refreshRequest, setRefreshRequest] = useState<{ symbol: string; timeframe: Timeframe; nonce: number } | null>(null);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [symbol, setSymbol] = useState<string>(config.symbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(config.timeframe);
   const provider = useMemo(() => new DSEProvider(), []);
@@ -67,22 +68,38 @@ export function App() {
     const unsubscribeDrawingEvents = drawingEvents.map((event) => chart.drawings.on(event, persistDrawings));
 
     const explicitRefresh = refreshRequest?.symbol === symbol && refreshRequest.timeframe === timeframe;
-    // Selection changes only read cached history. Network access is reserved for the refresh button.
-    if (explicitRefresh || provider.hasCachedData(symbol)) {
-      void service.load({ symbol, timeframe, limit: config.initialBars, refresh: explicitRefresh }).then(() => {
-        if (cancelled || service.getState().status !== 'ready') return;
-        try {
-          const saved = loadDrawings(window.localStorage, storageKey);
-          if (saved !== null) {
-            restoringDrawings = true;
-            chart.drawings.import(saved);
-            restoringDrawings = false;
-          }
-        } catch {
+    const restoreSavedDrawings = () => {
+      if (cancelled || service.getState().status !== 'ready') return;
+      try {
+        const saved = loadDrawings(window.localStorage, storageKey);
+        if (saved !== null) {
+          restoringDrawings = true;
+          chart.drawings.import(saved);
           restoringDrawings = false;
         }
-        persistenceReady = true;
-      });
+      } catch {
+        restoringDrawings = false;
+      }
+      persistenceReady = true;
+    };
+    // Network access is reserved for the button. One press refreshes all symbols,
+    // so subsequent symbol/timeframe changes use the local daily-history cache.
+    if (explicitRefresh) {
+      setIsRefreshingAll(true);
+      void (async () => {
+        try {
+          await provider.refreshAll();
+          if (cancelled) return;
+          await service.load({ symbol, timeframe, limit: config.initialBars });
+          restoreSavedDrawings();
+        } finally {
+          setIsRefreshingAll(false);
+        }
+      })();
+    } else if (provider.hasCachedData(symbol)) {
+      void service.load({ symbol, timeframe, limit: config.initialBars }).then(restoreSavedDrawings);
+    } else {
+      setIsRefreshingAll(false);
     }
 
     return () => {
@@ -102,7 +119,7 @@ export function App() {
 
   const feed = describeFeed(state);
   const statusParts = [
-    state.status === 'loading' ? 'جارٍ جلب البيانات…' : '',
+    isRefreshingAll ? 'جارٍ تحديث بيانات السوق…' : state.status === 'loading' ? 'جارٍ جلب البيانات…' : '',
     state.status === 'idle' ? 'اضغط «تحديث البيانات» لجلب الأسعار' : '',
     state.status === 'ready' ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '') : '',
     state.status === 'error' ? 'Failed to load' : '',
@@ -130,7 +147,7 @@ export function App() {
               onClick={() => { setRefreshRequest(null); setTimeframe(item.value); }}>{item.label}</button>
           ))}
         </div>
-        <button type="button" className="refresh-button" disabled={state.status === 'loading'} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>{state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}</button>
+        <button type="button" className="refresh-button" disabled={state.status === 'loading' || isRefreshingAll} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>{isRefreshingAll || state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}</button>
         <TopBarMenus workspace={session?.workspace ?? null} />
         <DrawingToolbar controller={session?.chart.drawings ?? null} />
         {state.source.isSimulated && <span className="badge-simulated" title={state.source.displayName}>SIMULATED DATA</span>}
