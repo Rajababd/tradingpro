@@ -137,7 +137,7 @@ export class DSEProvider implements MarketDataProvider {
     const source = getSymbol(symbol);
     let response: Response;
     try {
-      response = await fetch(source.url, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+      response = await fetch(source.url, { method: 'GET', headers: { Accept: 'application/json' }, ...(signal === undefined ? {} : { signal }) });
     } catch (error) {
       if (signal?.aborted) throw error;
       throw new Error(`Cannot reach DSE data endpoint for ${symbol}. The browser may be blocking cross-origin requests (CORS); a same-origin proxy would then be required.`);
