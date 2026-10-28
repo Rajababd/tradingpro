@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChartController } from '../chart/ChartController';
+import { drawingStorageKey, loadDrawings, saveDrawings } from '../chart/DrawingStorage';
 import { FixtureProvider } from '../data/FixtureProvider';
 import { MarketDataService, initialMarketDataState } from '../data/MarketDataService';
 import { bindIndicatorsToService } from '../indicators/bindIndicatorsToService';
@@ -51,13 +52,52 @@ export function App() {
     setSession({ chart, service, workspace });
 
     let cancelled = false;
+    let restoringDrawings = false;
+    let persistenceReady = false;
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    const storageKey = drawingStorageKey(config.symbol, config.timeframe);
+    const persistDrawings = () => {
+      if (cancelled || restoringDrawings || !persistenceReady) return;
+      if (saveTimer !== undefined) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        saveTimer = undefined;
+        try {
+          saveDrawings(window.localStorage, storageKey, chart.drawings.export());
+        } catch {
+          // Persistence is best-effort; storage availability must not affect chart use.
+        }
+      }, 150);
+    };
+    const drawingEvents = ['drawing:added', 'drawing:removed', 'drawing:cleared', 'drawing:updated', 'drawing:edit-finished'];
+    const unsubscribeDrawingEvents = drawingEvents.map((event) => chart.drawings.on(event, persistDrawings));
+
     void service.load({ symbol: config.symbol, timeframe: config.timeframe, limit: config.initialBars }).then(() => {
       if (cancelled || service.getState().status !== 'ready') return;
+      try {
+        const saved = loadDrawings(window.localStorage, storageKey);
+        if (saved !== null) {
+          restoringDrawings = true;
+          chart.drawings.import(saved);
+          restoringDrawings = false;
+        }
+      } catch {
+        restoringDrawings = false;
+        // Invalid/unavailable saved drawings must not prevent the chart from loading.
+      }
+      persistenceReady = true;
       service.startLive({ intervalMs: config.pollIntervalMs });
     });
 
     return () => {
       cancelled = true;
+      if (saveTimer !== undefined) clearTimeout(saveTimer);
+      // Flush the final state before detaching the drawing manager.
+      try {
+        if (persistenceReady) saveDrawings(window.localStorage, storageKey, chart.drawings.export());
+      } catch {
+        // Ignore storage restrictions during teardown.
+      }
+      unsubscribeDrawingEvents.forEach((unsubscribe) => unsubscribe());
       unexpose();
       workspace.dispose();
       unbindIndicators();
