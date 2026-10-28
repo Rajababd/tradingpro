@@ -14,7 +14,7 @@ describe('DSEProvider', () => {
   it('parses numeric strings and preserves daily OHLC, volume and traded value', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 })));
     const provider = new DSEProvider();
-    const bars = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D' });
+    const bars = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
     expect(bars).toHaveLength(4);
     expect(bars[0]).toMatchObject({
       time: Math.floor(Date.parse('2026-01-26T00:00:00Z') / 1000),
@@ -28,7 +28,7 @@ describe('DSEProvider', () => {
 
   it('aggregates daily sessions into weekly OHLC candles and sums turnover', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 })));
-    const bars = await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1W' });
+    const bars = await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1W', refresh: true });
     expect(bars).toHaveLength(2);
     expect(bars[0]).toMatchObject({
       time: Math.floor(Date.parse('2026-01-26T00:00:00Z') / 1000),
@@ -39,7 +39,7 @@ describe('DSEProvider', () => {
 
   it('aggregates daily sessions into calendar-month candles', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 })));
-    const bars = await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1M' });
+    const bars = await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1M', refresh: true });
     expect(bars).toHaveLength(2);
     expect(bars[0]).toMatchObject({ open: 10, high: 14, low: 9, close: 13, volume: 300, valueTraded: 3000 });
     expect(bars[1]).toMatchObject({ open: 13, high: 16, low: 12, close: 15, volume: 700, valueTraded: 7000 });
@@ -48,19 +48,19 @@ describe('DSEProvider', () => {
   it('supports the wrapped DWX index payload', async () => {
     const indexRows = [{ date: '2026-01-26', open_val: '100', max_val: '104', min_val: '99', close_val: '103', traded_volume: '55' }];
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ value_and_date: indexRows }), { status: 200 })));
-    const bars = await new DSEProvider().fetchHistorical({ symbol: 'DWX', timeframe: '1D' });
+    const bars = await new DSEProvider().fetchHistorical({ symbol: 'DWX', timeframe: '1D', refresh: true });
     expect(bars).toHaveLength(1);
     expect(bars[0]).toMatchObject({ open: 100, high: 104, low: 99, close: 103, volume: 55 });
   });
 
   it('rejects a response with no complete OHLC rows instead of fabricating candles', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([{ date: '2026-01-26', close: '10' }]), { status: 200 })));
-    await expect(new DSEProvider().fetchHistorical({ symbol: 'DWX', timeframe: '1D' })).rejects.toThrow(/no usable OHLC rows/i);
+    await expect(new DSEProvider().fetchHistorical({ symbol: 'DWX', timeframe: '1D', refresh: true })).rejects.toThrow(/no usable OHLC rows/i);
   });
 
   it('returns an empty result for a zero-length page', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 })));
-    expect(await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', limit: 0 })).toEqual([]);
+    expect(await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1D', limit: 0, refresh: true })).toEqual([]);
   });
   
   it('reuses cached daily history for timeframe changes without another network request', async () => {
@@ -73,8 +73,8 @@ describe('DSEProvider', () => {
     vi.stubGlobal('fetch', fetchMock);
     const provider = new DSEProvider();
     await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
-    const weekly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1W' });
-    const monthly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1M' });
+    const weekly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1W', refresh: true });
+    const monthly = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1M', refresh: true });
     expect(weekly).toHaveLength(2);
     expect(monthly).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
