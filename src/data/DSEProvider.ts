@@ -127,6 +127,25 @@ export class DSEProvider implements MarketDataProvider {
     return this.#readCachedDaily(symbol) !== null;
   }
 
+  /** Refresh every configured symbol sequentially so later symbol changes can use local history. */
+  async refreshAll(): Promise<{ refreshed: string[]; failed: string[] }> {
+    const refreshed: string[] = [];
+    const failed: string[] = [];
+    for (const item of DSE_SYMBOLS) {
+      try {
+        await this.#fetchBars(item.symbol, '1D', undefined, true);
+        if (this.lastRefreshWarning !== null) failed.push(item.symbol);
+        else refreshed.push(item.symbol);
+      } catch {
+        failed.push(item.symbol);
+      }
+    }
+    this.lastRefreshWarning = failed.length > 0
+      ? `تعذّر تحديث بعض الرموز (${failed.join(', ')}). ستُستخدم البيانات المحفوظة حيثما توفرت.`
+      : null;
+    return { refreshed, failed };
+  }
+
   async fetchHistorical(request: HistoricalRequest): Promise<unknown[]> {
     const bars = await this.#fetchBars(request.symbol, request.timeframe, request.signal, request.refresh === true);
     const filtered = request.before === undefined ? bars : bars.filter((bar) => Number(bar.time) < request.before!);
@@ -168,7 +187,6 @@ export class DSEProvider implements MarketDataProvider {
   async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal, refresh = false): Promise<Array<Record<string, unknown>>> {
     getSymbol(symbol);
     const cached = this.#readCachedDaily(symbol);
-    if (!refresh) this.lastRefreshWarning = null;
     if (!refresh && cached !== null) return aggregateDaily(cached, timeframe);
     if (!refresh) throw new Error(`No cached data for ${symbol}. Click «تحديث البيانات» to fetch history.`);
     if (refresh) this.lastRefreshWarning = null;
