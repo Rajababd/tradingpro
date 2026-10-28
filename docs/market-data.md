@@ -37,11 +37,9 @@ traded value are summed only when every contributing daily value is present. The
 trading session in the bucket, avoiding synthetic weekend timestamps. Selecting a different symbol or timeframe reloads
 the series and restores drawings from that symbol/timeframe's separate storage key.
 
-The DSE feed is polled every fifteen minutes because the wired source is historical daily data, not an intraday stream.
-Direct browser access depends on DSE allowing cross-origin requests (CORS). If the browser blocks these requests, a
-same-origin server/proxy is required; this client-only change does not silently bypass that browser security boundary.
-The endpoint schemas and live CORS behavior must be verified in the deployed browser before considering the integration
-production-ready.
+The app does not poll DSE automatically. The user presses **Update data** to request a fresh copy of the selected symbol's historical daily records. Changing symbol or timeframe does not issue a network request until the button is pressed. No live feed is started.
+
+All browser requests go to `/api/market-data?symbol=<allowlisted-symbol>` rather than contacting DSE directly. `backend/app.py` is a small Flask proxy with a fixed symbol-to-endpoint allowlist, upstream timeout and response-size limit, JSON validation, and CORS response headers. This avoids relying on DSE to grant browser CORS access. For local development, start the backend on `127.0.0.1:5000`; Vite forwards `/api` to it. For deployment, host the backend separately and set `VITE_DSE_API_BASE_URL` to its full HTTPS `/api/market-data` URL before building the frontend. Configure `TRADINGPRO_ALLOWED_ORIGINS` on the backend when the frontend's origin is known; the wildcard default is only for this public, read-only market-data endpoint. See `backend/README.md` for setup.
 
 ## Update policy (`CandleStore`)
 | Incoming candle | Result |
