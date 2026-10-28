@@ -265,22 +265,23 @@ with sync_playwright() as p:
     menu_rect = page.locator("#menu-sma").bounding_box()
     drag_point = None
     for canvas_rect in canvas_rects:
-        for x_ratio in (0.25, 0.35, 0.45, 0.55, 0.65, 0.75):
+        delta = min(canvas_rect["width"] * 0.18, 180)
+        for x_ratio in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7):
             for y_ratio in (0.45, 0.65, 0.8):
                 px = canvas_rect["x"] + canvas_rect["width"] * x_ratio
                 py = canvas_rect["y"] + canvas_rect["height"] * y_ratio
-                inside_menu = menu_rect and menu_rect["x"] <= px <= menu_rect["x"] + menu_rect["width"] and menu_rect["y"] <= py <= menu_rect["y"] + menu_rect["height"]
-                if not inside_menu:
-                    drag_point = (px, py, canvas_rect)
+                path_left, path_right = sorted((px, px + delta))
+                path_hits_menu = menu_rect and path_right >= menu_rect["x"] and path_left <= menu_rect["x"] + menu_rect["width"] and menu_rect["y"] <= py <= menu_rect["y"] + menu_rect["height"]
+                if not path_hits_menu:
+                    drag_point = (px, py, canvas_rect, delta)
                     break
             if drag_point:
                 break
         if drag_point:
             break
-    check("M11 found an unobstructed chart canvas point for panning", drag_point is not None)
+    check("M11 found an unobstructed chart canvas path for panning", drag_point is not None)
     if drag_point:
-        px, py, canvas_rect = drag_point
-        delta = min(canvas_rect["width"] * 0.18, 180)
+        px, py, canvas_rect, delta = drag_point
         page.mouse.move(px, py); page.mouse.down(); page.mouse.move(px + delta, py, steps=10); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
