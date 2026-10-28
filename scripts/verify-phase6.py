@@ -257,9 +257,9 @@ with sync_playwright() as p:
     check("M11 dragging inside the open menu does not pan the chart", abs(r0["from"] - r1["from"]) < 1e-6 and page.locator("#menu-sma").count() == 1, (r0, r1))
     # Use the chart's actual vertical midpoint: the new symbol/timeframe controls make the topbar taller,
     # so a fixed y+200 coordinate can land outside the chart on some viewport sizes.
-    drag_x = box["x"] + box["width"] * 0.08
-    drag_y = box["y"] + box["height"] * 0.8
-    page.mouse.move(drag_x, drag_y); page.mouse.down(); page.mouse.move(drag_x + box["width"] * 0.2, drag_y, steps=8); page.mouse.up(); page.wait_for_timeout(250)
+    drag_x = box["x"] + box["width"] * 0.25
+    drag_y = box["y"] + box["height"] * 0.75
+    page.mouse.move(drag_x, drag_y); page.mouse.down(); page.mouse.move(drag_x + box["width"] * 0.2, drag_y, steps=10); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
 
