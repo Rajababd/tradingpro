@@ -101,9 +101,9 @@ export function App() {
 
   const feed = describeFeed(state);
   const statusParts = [
-    state.status === 'loading' || state.status === 'idle' ? 'جارٍ تحميل البيانات…' : '',
-    state.status === 'ready' ? `${state.candleCount} شمعة` + (state.issues.length > 0 ? ` · ${state.issues.length} مشكلة بيانات` : '') : '',
-    state.status === 'error' ? 'فشل تحميل البيانات' : '',
+    state.status === 'loading' || state.status === 'idle' ? 'Loading…' : '',
+    state.status === 'ready' ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '') : '',
+    state.status === 'error' ? 'Failed to load' : '',
     feed.label,
     describeHistory(state),
   ].filter((part) => part !== '');
@@ -138,7 +138,7 @@ export function App() {
         {state.status === 'error' && (
           <div className="overlay" role="alert">
             <p>{state.error}</p>
-            <button type="button" onClick={() => setAttempt((n) => n + 1)}>إعادة المحاولة</button>
+            <button type="button" onClick={() => setAttempt((n) => n + 1)}>Retry</button>
           </div>
         )}
       </main>
