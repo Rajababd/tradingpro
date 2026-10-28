@@ -166,7 +166,7 @@ export class DSEProvider implements MarketDataProvider {
     }
     const warnings: string[] = [];
     if (failed.length > 0) warnings.push(`تعذّر تحديث بعض الرموز (${failed.join(', ')}). ستُستخدم البيانات المحفوظة حيثما توفرت.`);
-    if (qualityWarnings.length > 0) warnings.push(`استُبعدت سجلات OHLC غير صالحة من: ${qualityWarnings.join(', ')}.`);
+    if (qualityWarnings.length > 0) warnings.push(`تم تصحيح بعض علاقات أسعار الشموع أو استبعاد سجلات غير صالحة في: ${qualityWarnings.join(', ')}.`);
     this.lastRefreshWarning = warnings.length > 0 ? warnings.join(' ') : null;
     return { refreshed, failed };
   }
