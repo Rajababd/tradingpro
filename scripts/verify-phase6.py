@@ -26,6 +26,7 @@ window.__h = {
 """
 
 def new_page(browser, **ctx):
+    global requested_urls
     page = browser.new_context(locale="en-US", **ctx).new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
