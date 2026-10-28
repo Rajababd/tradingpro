@@ -11,7 +11,7 @@ export const DSE_SYMBOLS = [
 ] as const;
 
 type DseSymbol = (typeof DSE_SYMBOLS)[number];
-type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null };
+type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null; corrected?: boolean };
 
 const numberOrNull = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -68,6 +68,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   // using the source's own values; never synthesize a missing price.
   const normalizedHigh = Math.max(high, open, close);
   const normalizedLow = Math.min(low, open, close);
+  const corrected = normalizedHigh !== high || normalizedLow !== low;
   const volume = firstNumber(row.volume_traded, row.traded_volume, row.volume);
   const valueTraded = firstNumber(row.value_traded, row.traded_value, row.valueTraded);
   if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
@@ -79,6 +80,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
     close,
     volume,
     valueTraded,
+    corrected,
   };
 }
 
@@ -245,9 +247,12 @@ export class DSEProvider implements MarketDataProvider {
       }
       const rawRows = rowsFromPayload(payload);
       const daily = rawRows.map(parseDailyRow).filter((row): row is DailyRow => row !== null);
-      this.lastSymbolDataWarning = daily.length < rawRows.length
-        ? `${rawRows.length - daily.length} سجلاً غير صالحاً من أصل ${rawRows.length}`
-        : null;
+      const rejectedCount = rawRows.length - daily.length;
+      const correctedCount = daily.filter((row) => row.corrected === true).length;
+      const qualityNotes: string[] = [];
+      if (correctedCount > 0) qualityNotes.push(`${correctedCount} شمعة صُحّحت علاقات أسعارها`);
+      if (rejectedCount > 0) qualityNotes.push(`${rejectedCount} سجل غير صالح من أصل ${rawRows.length}`);
+      this.lastSymbolDataWarning = qualityNotes.length > 0 ? qualityNotes.join('؛ ') : null;
       if (daily.length === 0) {
         throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
       }
