@@ -168,6 +168,7 @@ export class DSEProvider implements MarketDataProvider {
   async #fetchBars(symbol: string, timeframe: Timeframe, signal?: AbortSignal, refresh = false): Promise<Array<Record<string, unknown>>> {
     getSymbol(symbol);
     const cached = this.#readCachedDaily(symbol);
+    if (!refresh) this.lastRefreshWarning = null;
     if (!refresh && cached !== null) return aggregateDaily(cached, timeframe);
     if (!refresh) throw new Error(`No cached data for ${symbol}. Click «تحديث البيانات» to fetch history.`);
     if (refresh) this.lastRefreshWarning = null;
