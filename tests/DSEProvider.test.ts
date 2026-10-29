@@ -139,7 +139,7 @@ describe('DSEProvider', () => {
     const result = await provider.refreshAll();
     expect(result.refreshed).toHaveLength(6);
     expect(result.failed).toEqual([]);
-    expect(provider.lastRefreshWarning).toMatch(/استُبعدت سجلات OHLC غير صالحة/);
+    expect(provider.lastRefreshWarning).toMatch(/استبعاد سجلات غير صالحة/);
   });
 
   it('repairs inconsistent high/low values using only prices supplied by DSE', async () => {
