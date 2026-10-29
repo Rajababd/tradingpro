@@ -153,7 +153,8 @@ describe('DSEProvider', () => {
     expect(bars[0]).toMatchObject({ open: 10, high: 11, low: 9, close: 11, volume: 25 });
     expect(bars[1]).toMatchObject({ open: 12, high: 15, low: 12, close: 13 });
     expect(bars[2]).toMatchObject({ open: 8, high: 9, low: 7, close: 7 });
-    for (const bar of bars) {
+    for (const item of bars) {
+      const bar = item as Record<string, unknown>;
       expect(Number(bar.high)).toBeGreaterThanOrEqual(Math.max(Number(bar.open), Number(bar.close), Number(bar.low)));
       expect(Number(bar.low)).toBeLessThanOrEqual(Math.min(Number(bar.open), Number(bar.close), Number(bar.high)));
     }
