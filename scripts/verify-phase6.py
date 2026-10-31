@@ -1,6 +1,8 @@
 """Phase 6 verification: drives the REAL app UI (menus, switches, fields) in Chromium and asserts on the real chart
 and engine through the development-only `window.__tradingpro` seam. Needs the dev server on :5173."""
 import sys
+import json
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 
 URL = "http://127.0.0.1:5173/"
@@ -24,12 +26,42 @@ window.__h = {
 """
 
 def new_page(browser, **ctx):
+    global requested_urls
     page = browser.new_context(locale="en-US", **ctx).new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "willReadFrequently" not in m.text else None)
+    # Mock the DSE historical endpoints for deterministic browser acceptance tests.
+    # Live endpoint access/CORS is a separate integration check.
+    daily_rows = []
+    start_date = date(2025, 1, 1)
+    for index in range(400):
+        opening = 100 + index
+        closing = opening + 0.5
+        daily_rows.append({
+            "date": (start_date + timedelta(days=index)).isoformat(),
+            "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
+            "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
+        })
+    requested_urls = []
+    def mock_dse(route):
+        requested_urls.append(route.request.url)
+        payload = daily_rows
+        if "symbol=DWX" in route.request.url:
+            payload = [{
+                "date": row["date"], "open_val": row["open"], "max_val": row["high"],
+                "min_val": row["low"], "close_val": row["close"],
+                "traded_volume": row["volume_traded"], "value_traded": row["value_traded"],
+            } for row in daily_rows]
+            payload = {"value_and_date": payload}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+    page.route("**/api/market-data**", mock_dse)
     page.goto(URL)
-    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=20000)
+    page.wait_for_timeout(200)
+    check("manual refresh: initial page load makes no market-data request", len(requested_urls) == 0, requested_urls)
+    page.get_by_role("button", name="تحديث البيانات").click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=30000)
+    check("manual refresh: fetches each configured symbol once", len(requested_urls) == 6 and {url.split("symbol=")[-1] for url in requested_urls} == {"DWX", "AVOC", "ABC", "BBSY", "NIB", "AHT"}, requested_urls)
     page.evaluate(JS_HELPERS)
     page.wait_for_timeout(400)
     return page, errors
@@ -38,6 +70,23 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page, errors = new_page(browser, viewport={"width": 1280, "height": 800})
     ev = page.evaluate
+    # Verify the new timeframe selector against the mocked historical daily source.
+    daily_count = ev(f"{T}.service.candles.length")
+    timeframe_buttons = page.locator(".timeframe-button")
+    check("DSE UI exposes daily, weekly and monthly display frames", timeframe_buttons.count() == 3)
+    page.get_by_role("button", name="أسبوعي", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'أسبوعي'", timeout=10000)
+    check("cached daily data: changing to weekly makes no network request", len(requested_urls) == 6, requested_urls)
+    weekly_count = ev(f"{T}.service.candles.length")
+    check("weekly frame aggregates daily source history into fewer candles", 0 < weekly_count < daily_count, (daily_count, weekly_count))
+    page.get_by_role("button", name="شهري", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'شهري'", timeout=10000)
+    check("cached daily data: changing to monthly makes no network request", len(requested_urls) == 6, requested_urls)
+    monthly_count = ev(f"{T}.service.candles.length")
+    check("monthly frame aggregates daily source history into fewer candles than weekly", 0 < monthly_count < weekly_count, (weekly_count, monthly_count))
+    page.get_by_role("button", name="يومي", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'يومي' && {T}.service.candles.length >= 300", timeout=10000)
+    check("cached daily data: switching back to daily makes no network request", len(requested_urls) == 6, requested_urls)
     trig = lambda name: page.get_by_role("button", name=name, exact=False).filter(has_text=name).first
     open_menu = lambda name: (trig(name).click(), page.wait_for_selector(f"#menu-{ 'indicators' if name == 'Indicators' else 'sma' }", timeout=3000))
     row = lambda attr, key: page.locator(f"[{attr}='{key}']")
@@ -180,7 +229,22 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     # ---- M10: live updates keep everything consistent
-    page.evaluate(f"() => {{ window.__appended0 = {T}.service.getState().stats.appended; }}")
+    # DSE supplies daily history rather than a rapid intraday stream. Inject one controlled
+    # live-feed event here so this acceptance test still verifies indicator synchronization
+    # on append without making the production DSE poll interval artificially short.
+    page.evaluate(f"""() => {{
+      const service = {T}.service;
+      window.__appended0 = service.getState().stats.appended;
+      service.stopLive();
+      service.startLive({{ intervalMs: 2000, feed: {{
+        start: (handlers) => {{ window.__emitDseTestCandle = handlers.onRecords; }},
+        stop: () => {{ delete window.__emitDseTestCandle; }}
+      }} }});
+      const last = service.candles.at(-1);
+      window.__emitDseTestCandle([{{ time: last.time + 86400, open: last.close,
+        high: last.close + 1, low: last.close - 1, close: last.close + 0.5,
+        volume: 1000, valueTraded: 5000 }}]);
+    }}""")
     page.wait_for_function(f"{T}.service.getState().stats.appended >= window.__appended0 + 1", timeout=30000)
     page.wait_for_timeout(300)
     ok = ev(f"""(() => {{
@@ -201,7 +265,34 @@ with sync_playwright() as p:
     page.mouse.move(pb["x"] + pb["width"] / 2, pb["y"] + 60); page.mouse.down(); page.mouse.move(pb["x"] + pb["width"] / 2 + 120, pb["y"] + 60, steps=6); page.mouse.up(); page.wait_for_timeout(200)
     r1 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging inside the open menu does not pan the chart", abs(r0["from"] - r1["from"]) < 1e-6 and page.locator("#menu-sma").count() == 1, (r0, r1))
-    page.mouse.move(box["x"] + box["width"] * 0.6, box["y"] + 200); page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.8, box["y"] + 200, steps=6); page.mouse.up(); page.wait_for_timeout(250)
+    # Use the chart's actual vertical midpoint: the new symbol/timeframe controls make the topbar taller,
+    # so a fixed y+200 coordinate can land outside the chart on some viewport sizes.
+    # Find a real chart-canvas point that is inside the chart but outside the floating panel/toolbar.
+    # This avoids depending on where the topbar places the menu at a given viewport size.
+    canvas_rects = page.locator("[data-testid=chart] canvas").evaluate_all(
+        "(els) => els.map((e) => { const r = e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }).filter((r) => r.width > 300 && r.height > 100).sort((a,b) => b.width*b.height-a.width*a.height)"
+    )
+    menu_rect = page.locator("#menu-sma").bounding_box()
+    drag_point = None
+    for canvas_rect in canvas_rects:
+        delta = min(canvas_rect["width"] * 0.18, 180)
+        for x_ratio in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7):
+            for y_ratio in (0.45, 0.65, 0.8):
+                px = canvas_rect["x"] + canvas_rect["width"] * x_ratio
+                py = canvas_rect["y"] + canvas_rect["height"] * y_ratio
+                path_left, path_right = sorted((px, px + delta))
+                path_hits_menu = menu_rect and path_right >= menu_rect["x"] and path_left <= menu_rect["x"] + menu_rect["width"] and menu_rect["y"] <= py <= menu_rect["y"] + menu_rect["height"]
+                if not path_hits_menu:
+                    drag_point = (px, py, canvas_rect, delta)
+                    break
+            if drag_point:
+                break
+        if drag_point:
+            break
+    check("M11 found an unobstructed chart canvas path for panning", drag_point is not None)
+    if drag_point:
+        px, py, canvas_rect, delta = drag_point
+        page.mouse.move(px, py); page.mouse.down(); page.mouse.move(px + delta, py, steps=10); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
 

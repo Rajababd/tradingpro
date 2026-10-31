@@ -1,5 +1,7 @@
 """Browser-level smoke test for the drawing toolbar (requires Vite + Playwright Chromium)."""
 import sys
+import json
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 
 URL = "http://127.0.0.1:5173/"
@@ -17,9 +19,33 @@ with sync_playwright() as p:
         context = browser.new_context(viewport=viewport, is_mobile=(mode == "phone"),
                                      has_touch=(mode == "phone"))
         page = context.new_page()
+        # Keep the drawing acceptance test deterministic and independent of DSE CORS/network.
+        # The live DSE integration is verified separately against the real endpoints.
+        daily_rows = []
+        session_date = date(2025, 1, 1)
+        for index in range(400):
+            opening = 100 + index
+            closing = opening + 0.5
+            daily_rows.append({
+                "date": (session_date + timedelta(days=index)).isoformat(),
+                "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
+                "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
+            })
+        def mock_dse(route):
+            payload = daily_rows
+            if "symbol=DWX" in route.request.url:
+                payload = [{
+                    "date": row["date"], "open_val": row["open"], "max_val": row["high"],
+                    "min_val": row["low"], "close_val": row["close"],
+                    "traded_volume": row["volume_traded"], "value_traded": row["value_traded"],
+                } for row in daily_rows]
+                payload = {"value_and_date": payload}
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+        page.route("**/api/market-data**", mock_dse)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(URL)
+        page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
@@ -159,6 +185,7 @@ with sync_playwright() as p:
         expected_drawings = export_drawings()
         page.wait_for_timeout(350)  # debounce window is 150 ms
         page.reload()
+        page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         try:
             page.wait_for_function(
@@ -185,6 +212,7 @@ with sync_playwright() as p:
             check(f"{mode}: clear drawings removes all drawings", len(export_drawings()) == 0)
             page.wait_for_timeout(350)  # allow the debounced empty state to be persisted
             page.reload()
+            page.get_by_role("button", name="تحديث البيانات").click()
             page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
             page.wait_for_timeout(400)  # allow asynchronous restoration to complete
             check(f"{mode}: cleared drawings stay cleared after reload", len(export_drawings()) == 0,

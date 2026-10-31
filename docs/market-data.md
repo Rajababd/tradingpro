@@ -24,8 +24,22 @@ Providers return **raw `unknown[]`**. They parse their own wire format (numeric 
 may not skip validation: the service always validates. Provider-specific details (auth, rate limits, the
 right polling interval) belong in the provider and `src/app/config.ts`, never in the chart or service.
 
-**Damascus Securities Exchange:** no provider exists and no endpoint is assumed. An authorized provider can be
-added by implementing this interface once the data source and its terms are verified.
+**Damascus Securities Exchange (`src/data/DSEProvider.ts`):** the app is configured for the DSE endpoints currently mapped in
+the provider: DWX, AVOC, ABC, BBSY, NIB and AHT. The provider fetches historical **daily** records and converts numeric
+strings and date fields at the source boundary. The index endpoint may use a wrapped payload (`value_and_date`), while
+issuer endpoints may return a direct array or a `data` array. Unsupported payloads and rows without a full OHLC tuple
+fail clearly; the provider does not fabricate open/high/low values from a close-only point.
+
+The chart's **1D / 1W / 1M** selector is a display aggregation, not a request for intraday/weekly/monthly source data:
+weekly bars combine daily sessions into Monday-starting trading weeks; monthly bars combine sessions by calendar month.
+For each bucket, open is the first session's open, close the last session's close, high/low are extrema, and volume and
+traded value are summed only when every contributing daily value is present. The candle timestamp is the first actual
+trading session in the bucket, avoiding synthetic weekend timestamps. Selecting a different symbol or timeframe reloads
+the series and restores drawings from that symbol/timeframe's separate storage key.
+
+The app does not poll DSE automatically. The user presses **Update data** to request a fresh copy of the selected symbol's historical daily records. Changing symbol or timeframe does not issue a network request until the button is pressed. No live feed is started.
+
+All browser requests go to `/api/market-data?symbol=<allowlisted-symbol>` rather than contacting DSE directly. `backend/app.py` is a small Flask proxy with a fixed symbol-to-endpoint allowlist, upstream timeout and response-size limit, JSON validation, and CORS response headers. This avoids relying on DSE to grant browser CORS access. For local development, start the backend on `127.0.0.1:5000`; Vite forwards `/api` to it. For deployment, host the backend separately and set `VITE_DSE_API_BASE_URL` to its full HTTPS `/api/market-data` URL before building the frontend. Configure `TRADINGPRO_ALLOWED_ORIGINS` on the backend when the frontend's origin is known; the wildcard default is only for this public, read-only market-data endpoint. See `backend/README.md` for setup.
 
 ## Update policy (`CandleStore`)
 | Incoming candle | Result |

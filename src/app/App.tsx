@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChartController } from '../chart/ChartController';
 import { drawingStorageKey, loadDrawings, saveDrawings } from '../chart/DrawingStorage';
-import { FixtureProvider } from '../data/FixtureProvider';
+import { DSEProvider, DSE_SYMBOLS } from '../data/DSEProvider';
 import { MarketDataService, initialMarketDataState } from '../data/MarketDataService';
 import { bindIndicatorsToService } from '../indicators/bindIndicatorsToService';
 import { IndicatorEngine } from '../indicators/IndicatorEngine';
 import { IndicatorWorkspace } from '../indicators/IndicatorWorkspace';
 import { createSeriesStyles } from '../indicators/seriesStyles';
+import type { Timeframe } from '../types/marketData';
 import { CrosshairLegend } from '../ui/CrosshairLegend';
 import { DrawingToolbar } from '../ui/DrawingToolbar';
 import { describeFeed, describeHistory } from '../ui/feedStatus';
@@ -17,61 +18,57 @@ import { config } from './config';
 import { exposeDevHook } from './devHook';
 import { theme } from './theme';
 
+const TIMEFRAMES: readonly { value: Timeframe; label: string }[] = [
+  { value: '1D', label: 'يومي' },
+  { value: '1W', label: 'أسبوعي' },
+  { value: '1M', label: 'شهري' },
+];
+
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Incrementing this re-runs the effect: a fresh provider, chart and service (Retry).
-  const [attempt, setAttempt] = useState(0);
-  // A new simulated market per attempt. Constructing it has no side effects.
-  const provider = useMemo(() => new FixtureProvider(), [attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [refreshRequest, setRefreshRequest] = useState<{ symbol: string; timeframe: Timeframe; nonce: number } | null>(null);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [symbol, setSymbol] = useState<string>(config.symbol);
+  const [timeframe, setTimeframe] = useState<Timeframe>(config.timeframe);
+  const provider = useMemo(() => new DSEProvider(), []);
   const fallback = useMemo(
-    () =>
-      initialMarketDataState({ id: provider.id, displayName: provider.displayName, isSimulated: provider.isSimulated }),
+    () => initialMarketDataState({ id: provider.id, displayName: provider.displayName, isSimulated: false }),
     [provider],
   );
-  // Held in state only so the legend and the status line can subscribe; they change on mount/unmount.
   const [session, setSession] = useState<{ chart: ChartController; service: MarketDataService; workspace: IndicatorWorkspace } | null>(null);
   const state = useMarketDataState(session?.service ?? null, fallback);
 
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
-
     const chart = new ChartController(theme);
     chart.mount(container);
     const service = new MarketDataService(provider, { olderPageSize: config.olderPageBars });
-
-    // Data reaches the chart incrementally, straight from the service, not through React.
     const unbind = bindChartToService(chart, service, { loadOlderWithinBars: config.loadOlderWithinBars });
-
-    // Indicators: calculation follows the same data events, and the workspace connects it to chart series.
     const engine = new IndicatorEngine();
     const unbindIndicators = bindIndicatorsToService(engine, service);
     const workspace = new IndicatorWorkspace(engine, { visibility: chart.visibility, series: chart.series }, createSeriesStyles(theme));
     const unexpose = exposeDevHook({ chart, service, engine, workspace });
-
     setSession({ chart, service, workspace });
 
     let cancelled = false;
     let restoringDrawings = false;
     let persistenceReady = false;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
-    const storageKey = drawingStorageKey(config.symbol, config.timeframe);
+    const storageKey = drawingStorageKey(symbol, timeframe);
     const persistDrawings = () => {
       if (cancelled || restoringDrawings || !persistenceReady) return;
       if (saveTimer !== undefined) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = undefined;
-        try {
-          saveDrawings(window.localStorage, storageKey, chart.drawings.export());
-        } catch {
-          // Persistence is best-effort; storage availability must not affect chart use.
-        }
+        try { saveDrawings(window.localStorage, storageKey, chart.drawings.export()); } catch { /* best-effort */ }
       }, 150);
     };
     const drawingEvents = ['drawing:added', 'drawing:removed', 'drawing:cleared', 'drawing:updated', 'drawing:edit-finished'];
     const unsubscribeDrawingEvents = drawingEvents.map((event) => chart.drawings.on(event, persistDrawings));
 
-    void service.load({ symbol: config.symbol, timeframe: config.timeframe, limit: config.initialBars }).then(() => {
+    const explicitRefresh = refreshRequest?.symbol === symbol && refreshRequest.timeframe === timeframe;
+    const restoreSavedDrawings = () => {
       if (cancelled || service.getState().status !== 'ready') return;
       try {
         const saved = loadDrawings(window.localStorage, storageKey);
@@ -82,21 +79,33 @@ export function App() {
         }
       } catch {
         restoringDrawings = false;
-        // Invalid/unavailable saved drawings must not prevent the chart from loading.
       }
       persistenceReady = true;
-      service.startLive({ intervalMs: config.pollIntervalMs });
-    });
+    };
+    // Network access is reserved for the button. One press refreshes all symbols,
+    // so subsequent symbol/timeframe changes use the local daily-history cache.
+    if (explicitRefresh) {
+      setIsRefreshingAll(true);
+      void (async () => {
+        try {
+          await provider.refreshAll();
+          if (cancelled) return;
+          await service.load({ symbol, timeframe, limit: config.initialBars });
+          restoreSavedDrawings();
+        } finally {
+          setIsRefreshingAll(false);
+        }
+      })();
+    } else if (provider.hasCachedData(symbol)) {
+      void service.load({ symbol, timeframe, limit: config.initialBars }).then(restoreSavedDrawings);
+    } else {
+      setIsRefreshingAll(false);
+    }
 
     return () => {
       cancelled = true;
       if (saveTimer !== undefined) clearTimeout(saveTimer);
-      // Flush the final state before detaching the drawing manager.
-      try {
-        if (persistenceReady) saveDrawings(window.localStorage, storageKey, chart.drawings.export());
-      } catch {
-        // Ignore storage restrictions during teardown.
-      }
+      try { if (persistenceReady) saveDrawings(window.localStorage, storageKey, chart.drawings.export()); } catch { /* storage may be disabled */ }
       unsubscribeDrawingEvents.forEach((unsubscribe) => unsubscribe());
       unexpose();
       workspace.dispose();
@@ -106,35 +115,43 @@ export function App() {
       chart.dispose();
       setSession(null);
     };
-  }, [attempt, provider]);
+  }, [provider, symbol, timeframe, refreshRequest]);
 
   const feed = describeFeed(state);
   const statusParts = [
-    state.status === 'loading' || state.status === 'idle' ? 'Loading…' : '',
-    state.status === 'ready'
-      ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '')
-      : '',
+    isRefreshingAll ? 'جارٍ تحديث بيانات السوق…' : state.status === 'loading' ? 'جارٍ جلب البيانات…' : '',
+    state.status === 'idle' && !isRefreshingAll ? 'اضغط «تحديث البيانات» لجلب الأسعار' : '',
+    state.status === 'ready' ? `${state.candleCount} candles` + (state.issues.length > 0 ? ` · ${state.issues.length} data issues` : '') : '',
     state.status === 'error' ? 'Failed to load' : '',
+    provider.lastRefreshWarning ?? '',
     feed.label,
     describeHistory(state),
   ].filter((part) => part !== '');
+  const selectedSymbol = DSE_SYMBOLS.find((item) => item.symbol === symbol) ?? DSE_SYMBOLS[0]!;
 
   return (
     <div className="app">
       <header className="topbar">
         <h1 className="brand">TradingPro</h1>
-        <span className="symbol">{config.symbol}</span>
-        <span className="timeframe">{config.timeframe}</span>
+        <label className="market-select-label">
+          <span className="sr-only">السهم أو المؤشر</span>
+          <select aria-label="السهم أو المؤشر" disabled={isRefreshingAll} value={symbol} onChange={(event) => { setRefreshRequest(null); setSymbol(event.target.value); }}>
+            {DSE_SYMBOLS.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol}</option>)}
+          </select>
+        </label>
+        <span className="market-name" title={selectedSymbol.name}>{selectedSymbol.name}</span>
+        <div className="timeframe-picker" role="group" aria-label="الإطار الزمني">
+          {TIMEFRAMES.map((item) => (
+            <button key={item.value} type="button" disabled={isRefreshingAll} aria-pressed={timeframe === item.value}
+              className={timeframe === item.value ? 'timeframe-button active' : 'timeframe-button'}
+              onClick={() => { setRefreshRequest(null); setTimeframe(item.value); }}>{item.label}</button>
+          ))}
+        </div>
+        <button type="button" className="refresh-button" disabled={state.status === 'loading' || isRefreshingAll} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>{isRefreshingAll || state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}</button>
         <TopBarMenus workspace={session?.workspace ?? null} />
         <DrawingToolbar controller={session?.chart.drawings ?? null} />
-        {state.source.isSimulated && (
-          <span className="badge-simulated" title={state.source.displayName}>
-            SIMULATED DATA
-          </span>
-        )}
-        <span className="status" role="status" data-tone={feed.tone}>
-          {statusParts.join(' · ')}
-        </span>
+        {state.source.isSimulated && <span className="badge-simulated" title={state.source.displayName}>SIMULATED DATA</span>}
+        <span className="status" role="status" data-tone={feed.tone}>{statusParts.join(' · ')}</span>
       </header>
       <main className="chart-area">
         <div ref={containerRef} className="chart" data-testid="chart" />
@@ -142,9 +159,7 @@ export function App() {
         {state.status === 'error' && (
           <div className="overlay" role="alert">
             <p>{state.error}</p>
-            <button type="button" onClick={() => setAttempt((n) => n + 1)}>
-              Retry
-            </button>
+            <button type="button" onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>إعادة المحاولة</button>
           </div>
         )}
       </main>

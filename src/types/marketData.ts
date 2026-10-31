@@ -1,12 +1,6 @@
 /**
- * Normalized market-data model.
- *
- * `UnixSeconds` is a market timestamp in SECONDS since the Unix epoch (UTC). It is a
- * branded type so it cannot be confused with chart logical indices, millisecond
- * timestamps, or pixel coordinates. Only the validator mints it.
- *
- * `volume` is `null` when the source supplied none. Missing volume is never
- * replaced with 0 or any other invented value.
+ * Normalized market-data model. All timestamps are UTC Unix seconds.
+ * Optional turnover metadata is preserved when a provider supplies it.
  */
 export type UnixSeconds = number & { readonly __brand: 'UnixSeconds' };
 
@@ -17,7 +11,9 @@ export interface Candle {
   readonly low: number;
   readonly close: number;
   readonly volume: number | null;
+  /** Total traded value for the period, when supplied by the source. */
+  readonly valueTraded?: number | null;
 }
 
-/** Widened as timeframe support is added; only daily bars exist today. */
-export type Timeframe = '1D';
+/** DSE daily bars can be aggregated into calendar weeks and months by the provider. */
+export type Timeframe = '1D' | '1W' | '1M';

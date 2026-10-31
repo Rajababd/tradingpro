@@ -5,6 +5,8 @@ export interface HistoricalRequest {
   readonly timeframe: Timeframe;
   /** Maximum number of most-recent candles wanted (counted back from `before` when given). */
   readonly limit?: number;
+  /** Bypass provider cache and fetch fresh history only for an explicit user refresh. */
+  readonly refresh?: boolean;
   /** Only candles strictly earlier than this time. Used to page backwards through history. */
   readonly before?: UnixSeconds;
   /** Lets the caller cancel an in-flight request. */
