@@ -27,33 +27,37 @@ export class ViewportController {
   readonly #handler = (range: LogicalRange | null): void =>
     this.#changes.emit({ range: toViewport(range), userDriven: this.gestures?.active ?? false });
 
+  readonly #timeScale: ReturnType<ChartPort['timeScale']>;
+
   constructor(
     private readonly chart: ChartPort,
     private readonly gestures?: { readonly active: boolean },
+    timeScale: ReturnType<ChartPort['timeScale']> = chart.timeScale(),
   ) {
+    this.#timeScale = timeScale;
     this.#changes = new EventChannel({
-      onFirstListener: () => this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.#handler),
-      onNoListeners: () => this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.#handler),
+      onFirstListener: () => this.#timeScale.subscribeVisibleLogicalRangeChange(this.#handler),
+      onNoListeners: () => this.#timeScale.unsubscribeVisibleLogicalRangeChange(this.#handler),
     });
   }
 
   /** The visible logical range, or null when there is no data yet. */
   getLogicalRange(): LogicalViewport | null {
-    return toViewport(this.chart.timeScale().getVisibleLogicalRange());
+    return toViewport(this.#timeScale.getVisibleLogicalRange());
   }
 
   /** Sets the visible logical range. Used to keep the same candles on screen after history is prepended. */
   setLogicalRange(range: LogicalViewport): void {
-    this.chart.timeScale().setVisibleLogicalRange(range);
+    this.#timeScale.setVisibleLogicalRange(range);
   }
 
   fitContent(): void {
-    this.chart.timeScale().fitContent();
+    this.#timeScale.fitContent();
   }
 
   /** Scrolls so the newest candle is at the right edge. */
   scrollToLatest(): void {
-    this.chart.timeScale().scrollToRealTime();
+    this.#timeScale.scrollToRealTime();
   }
 
   /** Fires on scroll, zoom, resize and data changes. Returns an unsubscribe function. */
