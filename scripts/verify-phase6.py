@@ -70,6 +70,18 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page, errors = new_page(browser, viewport={"width": 1280, "height": 800})
     ev = page.evaluate
+    # Compact shell acceptance: two 40px rows and a narrow left drawing rail.
+    shell = ev("""(() => {
+      const box = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return {x:r.x, right:r.right, width:r.width, height:r.height}; };
+      const buttons = [...document.querySelectorAll('.side-toolbar .drawing-tool-button')].map((el) => { const r = el.getBoundingClientRect(); return {w:r.width,h:r.height}; });
+      return {top:box('.topbar'), second:box('.toolbar-row'), rail:box('.side-toolbar'), chart:box('.chart-area'), buttons};
+    })()""")
+    check("compact shell: first top row is exactly 40px", abs(shell["top"]["height"] - 40) <= 0.5, shell)
+    check("compact shell: second top row is exactly 40px", abs(shell["second"]["height"] - 40) <= 0.5, shell)
+    check("compact shell: left drawing rail is narrow and sits beside the chart",
+          38 <= shell["rail"]["width"] <= 44 and abs(shell["chart"]["x"] - shell["rail"]["right"]) <= 1, shell)
+    check("compact shell: drawing controls are square icon buttons",
+          len(shell["buttons"]) >= 5 and all(abs(b["w"] - b["h"]) <= 1 for b in shell["buttons"]), shell)
     # Verify the new timeframe selector against the mocked historical daily source.
     daily_count = ev(f"{T}.service.candles.length")
     timeframe_buttons = page.locator(".timeframe-button")
