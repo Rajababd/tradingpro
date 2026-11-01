@@ -597,3 +597,23 @@ body {
   .drawing-toolbar { gap: 2px; }
   .drawing-tool-button { width: 30px; height: 30px; min-height: 30px; }
 }
+
+
+/* Dropdown renders its trigger as a sibling of the panel, not a direct child
+   of .toolbar-row. Target it by containment so the compact toolbar styling applies. */
+.toolbar-row .menu-trigger {
+  flex: none;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  font-size: 12px;
+}
+.toolbar-row .menu-trigger:hover,
+.toolbar-row .menu-trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--c-accent) 10%, transparent);
+}
+@media (max-width: 600px) {
+  .toolbar-row .menu-trigger { padding: 0 8px; }
+}
