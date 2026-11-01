@@ -52,6 +52,7 @@ export class ChartController {
   #gestures: UserGestureTracker | null = null;
   #priceScaleRangeHandler: (() => void) | null = null;
   #priceScaleWidth = 64;
+  #priceCandles: Candle[] = [];
 
   /** Current minimum width reserved for right-axis labels. */
   get priceScaleMinimumWidth(): number {
@@ -64,9 +65,10 @@ export class ChartController {
    */
   #updatePriceScaleWidth(): void {
     if (this.#chart === null || this.#series === null) return;
-    const data = this.#series.require<'Candlestick'>(PRICE_SERIES_ID).data();
+    const data = this.#priceCandles;
     if (data.length === 0) return;
-    const range = this.#chart.timeScale().getVisibleLogicalRange();
+    const timeScale = this.#chart.timeScale();
+    const range = typeof timeScale.getVisibleLogicalRange === 'function' ? timeScale.getVisibleLogicalRange() : null;
     const from = range === null ? 0 : Math.max(0, Math.floor(range.from));
     const to = range === null ? data.length - 1 : Math.min(data.length - 1, Math.ceil(range.to));
     const visible = data.slice(from, to + 1);
@@ -88,7 +90,8 @@ export class ChartController {
     const nextWidth = Math.max(56, Math.min(132, Math.ceil(measured + 26)));
     if (nextWidth === this.#priceScaleWidth) return;
     this.#priceScaleWidth = nextWidth;
-    this.#chart.priceScale('right').applyOptions({ minimumWidth: nextWidth });
+    const priceScale = typeof this.#chart.priceScale === 'function' ? this.#chart.priceScale('right') : null;
+    priceScale?.applyOptions({ minimumWidth: nextWidth });
   }
 
   constructor(private readonly theme: ChartTheme) {}
@@ -175,7 +178,10 @@ export class ChartController {
         series.get<'Candlestick'>(PRICE_SERIES_ID),
       );
       this.#priceScaleRangeHandler = () => this.#updatePriceScaleWidth();
-      chart.timeScale().subscribeVisibleLogicalRangeChange(this.#priceScaleRangeHandler);
+      const timeScale = chart.timeScale();
+      if (typeof timeScale.subscribeVisibleLogicalRangeChange === 'function') {
+        timeScale.subscribeVisibleLogicalRangeChange(this.#priceScaleRangeHandler);
+      }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
     } catch (error) {
@@ -195,6 +201,7 @@ export class ChartController {
     if (this.#chart === null || this.#series === null || this.#viewport === null) {
       throw new Error('ChartController is not mounted.');
     }
+    this.#priceCandles = [...candles];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
     this.#viewport.fitContent();
     this.#updatePriceScaleWidth();
@@ -208,6 +215,9 @@ export class ChartController {
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).update(toCandlestickData(candle));
+    const last = this.#priceCandles.at(-1);
+    if (last?.time === candle.time) this.#priceCandles[this.#priceCandles.length - 1] = candle;
+    else this.#priceCandles.push(candle);
     this.#updatePriceScaleWidth();
   }
 
@@ -220,6 +230,7 @@ export class ChartController {
   prependCandles(all: readonly Candle[], added: number): void {
     if (this.#series === null || this.#viewport === null || this.#drawings === null) throw new Error('ChartController is not mounted.');
     const range = this.#viewport.getLogicalRange();
+    this.#priceCandles = [...all];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
     if (added > 0) this.#drawings.shiftLogicalAnchors(added);
     if (range !== null && added > 0) {
@@ -233,7 +244,12 @@ export class ChartController {
     this.#disposed = true;
     if (this.#chart === null) return;
     // Detach library subscriptions before the chart is destroyed.
-    if (this.#priceScaleRangeHandler !== null) this.#chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.#priceScaleRangeHandler);
+    if (this.#priceScaleRangeHandler !== null) {
+      const timeScale = this.#chart.timeScale();
+      if (typeof timeScale.unsubscribeVisibleLogicalRangeChange === 'function') {
+        timeScale.unsubscribeVisibleLogicalRangeChange(this.#priceScaleRangeHandler);
+      }
+    }
     this.#priceScaleRangeHandler = null;
     this.#drawings?.dispose();
     this.#crosshair?.dispose();
@@ -251,6 +267,7 @@ export class ChartController {
     this.#crosshair = null;
     this.#drawings = null;
     this.#gestures = null;
+    this.#priceCandles = [];
   }
 
   #mounted<T>(value: T | null): T {
