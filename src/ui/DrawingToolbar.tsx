@@ -29,8 +29,10 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
     return unsubscribe;
   }, [controller]);
 
-  if (controller === null) return null;
-  const available = controller.tools.filter((tool) => tool.type in TOOL_LABELS);
+  const available = controller?.tools.filter((tool) => tool.type in TOOL_LABELS) ?? Object.keys(TOOL_LABELS).map((type) => ({
+    type,
+    requiredAnchors: type === 'horizontal-line' ? 1 : 2,
+  }));
 
   return (
     <div className="drawing-toolbar" role="group" aria-label="Drawing tools">
@@ -41,9 +43,9 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
           type="button"
           className="drawing-tool-button"
           aria-label={TOOL_LABELS[tool.type]}
-          aria-pressed={activeTool === tool.type}
+          aria-pressed={activeTool === tool.type}\n          disabled={controller === null}
           title={`${TOOL_LABELS[tool.type]} · ${tool.requiredAnchors} click${tool.requiredAnchors === 1 ? '' : 's'}`}
-          onClick={() => controller.setActiveTool(activeTool === tool.type ? null : tool.type)}
+          onClick={() => controller?.setActiveTool(activeTool === tool.type ? null : tool.type)}
         >
           <span aria-hidden="true">{TOOL_GLYPHS[tool.type]}</span>
         </button>
@@ -54,7 +56,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
         </button>
       )}
       <span className="toolbar-divider" aria-hidden="true" />
-      <button type="button" className="drawing-tool-button" aria-label="Clear drawings" title="Clear drawings" onClick={() => controller.clear()}>
+      <button type="button" className="drawing-tool-button" aria-label="Clear drawings" title="Clear drawings" disabled={controller === null} onClick={() => controller?.clear()}>
         <span aria-hidden="true">⌫</span>
       </button>
     </div>
