@@ -82,6 +82,23 @@ with sync_playwright() as p:
           38 <= shell["rail"]["width"] <= 44 and abs(shell["chart"]["x"] - shell["rail"]["right"]) <= 1, shell)
     check("compact shell: drawing controls are square icon buttons",
           len(shell["buttons"]) >= 5 and all(abs(b["w"] - b["h"]) <= 1 for b in shell["buttons"]), shell)
+    check("compact shell: both top menus are visible inside the second row",
+          page.get_by_role("button", name="Indicators").is_visible() and page.get_by_role("button", name="SMA").is_visible(), shell)
+    check("compact shell: symbol selector and refresh action are visible in the first row",
+          page.locator(".topbar .market-select-label select").is_visible() and page.get_by_role("button", name="تحديث البيانات").is_visible(), shell)
+    # Price-axis width must grow when the visible labels gain digits, then shrink again.
+    base_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
+    original_candles = ev(f"{T}.service.candles")
+    ev(f"""{T}.chart.setCandles({T}.service.candles.map((c) => ({{
+      ...c, open: c.open * 10000, high: c.high * 10000, low: c.low * 10000, close: c.close * 10000
+    }})))""")
+    expanded_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
+    check("price scale expands when visible price labels become longer", expanded_price_scale_width > base_price_scale_width,
+          (base_price_scale_width, expanded_price_scale_width))
+    ev(f"{T}.chart.setCandles({T}.service.candles)")
+    restored_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
+    check("price scale contracts again when shorter labels return", restored_price_scale_width < expanded_price_scale_width,
+          (expanded_price_scale_width, restored_price_scale_width))
     # Verify the new timeframe selector against the mocked historical daily source.
     daily_count = ev(f"{T}.service.candles.length")
     timeframe_buttons = page.locator(".timeframe-button")
