@@ -178,8 +178,13 @@ export class ChartController {
         series.get<'Candlestick'>(PRICE_SERIES_ID),
       );
       const timeScale = chart.timeScale();
-      if (typeof timeScale.subscribeVisibleLogicalRangeChange === 'function') {
-        this.#priceScaleRangeHandler = this.#viewport.subscribe(() => this.#updatePriceScaleWidth());
+      if (
+        typeof timeScale.subscribeVisibleLogicalRangeChange === 'function' &&
+        typeof timeScale.unsubscribeVisibleLogicalRangeChange === 'function'
+      ) {
+        const updatePriceScale = () => this.#updatePriceScaleWidth();
+        timeScale.subscribeVisibleLogicalRangeChange(updatePriceScale);
+        this.#priceScaleRangeHandler = () => timeScale.unsubscribeVisibleLogicalRangeChange(updatePriceScale);
       }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
