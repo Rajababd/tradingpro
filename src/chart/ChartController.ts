@@ -177,7 +177,10 @@ export class ChartController {
       this.#crosshair = new CrosshairController(chart, () =>
         series.get<'Candlestick'>(PRICE_SERIES_ID),
       );
-      this.#priceScaleRangeHandler = this.#viewport.subscribe(() => this.#updatePriceScaleWidth());
+      const timeScale = chart.timeScale();
+      if (typeof timeScale.subscribeVisibleLogicalRangeChange === 'function') {
+        this.#priceScaleRangeHandler = this.#viewport.subscribe(() => this.#updatePriceScaleWidth());
+      }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
     } catch (error) {
