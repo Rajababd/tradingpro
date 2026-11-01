@@ -131,37 +131,47 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <h1 className="brand">TradingPro</h1>
-        <label className="market-select-label">
-          <span className="sr-only">السهم أو المؤشر</span>
-          <select aria-label="السهم أو المؤشر" disabled={isRefreshingAll} value={symbol} onChange={(event) => { setRefreshRequest(null); setSymbol(event.target.value); }}>
-            {DSE_SYMBOLS.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol}</option>)}
-          </select>
-        </label>
-        <span className="market-name" title={selectedSymbol.name}>{selectedSymbol.name}</span>
-        <div className="timeframe-picker" role="group" aria-label="الإطار الزمني">
-          {TIMEFRAMES.map((item) => (
-            <button key={item.value} type="button" disabled={isRefreshingAll} aria-pressed={timeframe === item.value}
-              className={timeframe === item.value ? 'timeframe-button active' : 'timeframe-button'}
-              onClick={() => { setRefreshRequest(null); setTimeframe(item.value); }}>{item.label}</button>
-          ))}
+      <header className="app-header">
+        <div className="topbar" aria-label="Market controls">
+          <h1 className="brand">TradingPro</h1>
+          <label className="market-select-label">
+            <span className="sr-only">السهم أو المؤشر</span>
+            <select aria-label="السهم أو المؤشر" disabled={isRefreshingAll} value={symbol} onChange={(event) => { setRefreshRequest(null); setSymbol(event.target.value); }}>
+              {DSE_SYMBOLS.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol}</option>)}
+            </select>
+          </label>
+          <span className="market-name" title={selectedSymbol.name}>{selectedSymbol.name}</span>
+          <button type="button" className="refresh-button" disabled={state.status === 'loading' || isRefreshingAll} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>
+            {isRefreshingAll || state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}
+          </button>
         </div>
-        <button type="button" className="refresh-button" disabled={state.status === 'loading' || isRefreshingAll} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>{isRefreshingAll || state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}</button>
-        <TopBarMenus workspace={session?.workspace ?? null} />
-        <DrawingToolbar controller={session?.chart.drawings ?? null} />
-        {state.source.isSimulated && <span className="badge-simulated" title={state.source.displayName}>SIMULATED DATA</span>}
-        <span className="status" role="status" data-tone={feed.tone}>{statusParts.join(' · ')}</span>
-      </header>
-      <main className="chart-area">
-        <div ref={containerRef} className="chart" data-testid="chart" />
-        <CrosshairLegend controller={session?.chart ?? null} />
-        {state.status === 'error' && (
-          <div className="overlay" role="alert">
-            <p>{state.error}</p>
-            <button type="button" onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>إعادة المحاولة</button>
+        <div className="toolbar-row" aria-label="Chart controls">
+          <TopBarMenus workspace={session?.workspace ?? null} />
+          <div className="timeframe-picker" role="group" aria-label="الإطار الزمني">
+            {TIMEFRAMES.map((item) => (
+              <button key={item.value} type="button" disabled={isRefreshingAll} aria-pressed={timeframe === item.value}
+                className={timeframe === item.value ? 'timeframe-button active' : 'timeframe-button'}
+                onClick={() => { setRefreshRequest(null); setTimeframe(item.value); }}>{item.label}</button>
+            ))}
           </div>
-        )}
+        </div>
+      </header>
+      <main className="workspace">
+        <aside className="side-toolbar" aria-label="Drawing tools">
+          <DrawingToolbar controller={session?.chart.drawings ?? null} />
+        </aside>
+        <section className="chart-area">
+          <div ref={containerRef} className="chart" data-testid="chart" />
+          <CrosshairLegend controller={session?.chart ?? null} />
+          {state.source.isSimulated && <span className="badge-simulated" title={state.source.displayName}>SIMULATED DATA</span>}
+          <div className="status" role="status" data-tone={feed.tone}>{statusParts.join(' · ')}</div>
+          {state.status === 'error' && (
+            <div className="overlay" role="alert">
+              <p>{state.error}</p>
+              <button type="button" onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>إعادة المحاولة</button>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
