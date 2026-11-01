@@ -51,7 +51,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
         </button>
       ))}
       {activeTool !== null && (
-        <button type="button" className="drawing-tool-button drawing-tool-cancel" aria-label="Cancel drawing" title="Cancel drawing" onClick={() => controller.setActiveTool(null)}>
+        <button type="button" className="drawing-tool-button drawing-tool-cancel" aria-label="Cancel drawing" title="Cancel drawing" disabled={controller === null} onClick={() => controller?.setActiveTool(null)}>
           <span aria-hidden="true">×</span>
         </button>
       )}
