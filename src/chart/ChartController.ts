@@ -50,6 +50,46 @@ export class ChartController {
   #crosshair: CrosshairController | null = null;
   #drawings: DrawingController | null = null;
   #gestures: UserGestureTracker | null = null;
+  #priceScaleRangeHandler: (() => void) | null = null;
+  #priceScaleWidth = 64;
+
+  /** Current minimum width reserved for right-axis labels. */
+  get priceScaleMinimumWidth(): number {
+    return this.#priceScaleWidth;
+  }
+
+  /**
+   * Measure the longest formatted price in the visible candle range and reserve enough
+   * room for it. Re-evaluated after data changes and horizontal zoom/scroll.
+   */
+  #updatePriceScaleWidth(): void {
+    if (this.#chart === null || this.#series === null) return;
+    const data = this.#series.require<'Candlestick'>(PRICE_SERIES_ID).data();
+    if (data.length === 0) return;
+    const range = this.#chart.timeScale().getVisibleLogicalRange();
+    const from = range === null ? 0 : Math.max(0, Math.floor(range.from));
+    const to = range === null ? data.length - 1 : Math.min(data.length - 1, Math.ceil(range.to));
+    const visible = data.slice(from, to + 1);
+    const formatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const labels = visible.flatMap((point) => [point.open, point.high, point.low, point.close]);
+    const longest = labels.reduce((best, value) => {
+      const label = formatter.format(value);
+      return label.length > best.length ? label : best;
+    }, '');
+    let measured = longest.length * 7.2;
+    if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (context !== null) {
+        context.font = '12px Arial, sans-serif';
+        measured = context.measureText(longest).width;
+      }
+    }
+    const nextWidth = Math.max(56, Math.min(132, Math.ceil(measured + 26)));
+    if (nextWidth === this.#priceScaleWidth) return;
+    this.#priceScaleWidth = nextWidth;
+    this.#chart.priceScale('right').applyOptions({ minimumWidth: nextWidth });
+  }
 
   constructor(private readonly theme: ChartTheme) {}
 
@@ -134,6 +174,8 @@ export class ChartController {
       this.#crosshair = new CrosshairController(chart, () =>
         series.get<'Candlestick'>(PRICE_SERIES_ID),
       );
+      this.#priceScaleRangeHandler = () => this.#updatePriceScaleWidth();
+      chart.timeScale().subscribeVisibleLogicalRangeChange(this.#priceScaleRangeHandler);
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
     } catch (error) {
@@ -155,6 +197,7 @@ export class ChartController {
     }
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
     this.#viewport.fitContent();
+    this.#updatePriceScaleWidth();
   }
 
   /**
@@ -165,6 +208,7 @@ export class ChartController {
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).update(toCandlestickData(candle));
+    this.#updatePriceScaleWidth();
   }
 
   /**
@@ -181,6 +225,7 @@ export class ChartController {
     if (range !== null && added > 0) {
       this.#viewport.setLogicalRange({ from: range.from + added, to: range.to + added });
     }
+    this.#updatePriceScaleWidth();
   }
 
   /** Idempotent. Safe before mount and after a previous dispose. */
@@ -188,6 +233,8 @@ export class ChartController {
     this.#disposed = true;
     if (this.#chart === null) return;
     // Detach library subscriptions before the chart is destroyed.
+    if (this.#priceScaleRangeHandler !== null) this.#chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.#priceScaleRangeHandler);
+    this.#priceScaleRangeHandler = null;
     this.#drawings?.dispose();
     this.#crosshair?.dispose();
     this.#viewport?.dispose();
