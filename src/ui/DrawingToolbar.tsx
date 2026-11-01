@@ -43,7 +43,8 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
           type="button"
           className="drawing-tool-button"
           aria-label={TOOL_LABELS[tool.type]}
-          aria-pressed={activeTool === tool.type}\n          disabled={controller === null}
+          aria-pressed={activeTool === tool.type}
+          disabled={controller === null}
           title={`${TOOL_LABELS[tool.type]} · ${tool.requiredAnchors} click${tool.requiredAnchors === 1 ? '' : 's'}`}
           onClick={() => controller?.setActiveTool(activeTool === tool.type ? null : tool.type)}
         >
