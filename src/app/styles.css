@@ -506,3 +506,94 @@ body {
   .timeframe-button { padding: 0 8px; }
   .status { flex-basis: 100%; margin-left: 0; }
 }
+
+
+/* ---- compact TradingView-style application shell -------------------------------------------- */
+.app { min-width: 0; min-height: 0; overflow: hidden; }
+.app-header { flex: none; display: flex; flex-direction: column; background: var(--c-panel); }
+.topbar {
+  height: 40px; min-height: 40px; flex: none; display: flex; flex-wrap: nowrap;
+  align-items: center; gap: 8px; padding: 0 8px; overflow: hidden;
+  border: 0; border-bottom: 1px solid var(--c-rule); background: var(--c-panel);
+}
+.brand { flex: none; font-size: 15px; line-height: 1; white-space: nowrap; }
+.market-select-label { flex: none; min-width: 0; }
+.market-select-label select {
+  display: block; height: 30px; min-height: 30px; max-width: 112px; padding: 0 7px;
+  border-radius: 5px; font-size: 13px; line-height: 28px;
+}
+.market-name { flex: 1 1 auto; min-width: 0; max-width: none; font-size: 11px; }
+.refresh-button {
+  flex: none; height: 30px; min-height: 30px; padding: 0 9px; border-radius: 5px;
+  font-size: 12px; line-height: 28px;
+}
+.toolbar-row {
+  height: 40px; min-height: 40px; flex: none; display: flex; flex-wrap: nowrap;
+  align-items: center; gap: 5px; padding: 0 6px; overflow-x: auto; overflow-y: hidden;
+  border-bottom: 1px solid var(--c-rule); scrollbar-width: none;
+}
+.toolbar-row::-webkit-scrollbar { display: none; }
+.toolbar-row > .menu-trigger { flex: none; height: 40px; min-height: 40px; padding: 0 10px; border: 0; border-radius: 0; font-size: 12px; }
+.toolbar-row > .menu-trigger:hover,
+.toolbar-row > .menu-trigger[aria-expanded='true'] { background: color-mix(in srgb, var(--c-accent) 10%, transparent); }
+.timeframe-picker {
+  flex: none; height: 36px; display: inline-flex; align-items: center; gap: 1px;
+  padding: 1px; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--c-ink) 72%, transparent);
+}
+.timeframe-button { height: 32px; min-height: 32px; padding: 0 9px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+.workspace { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; overflow: hidden; }
+.side-toolbar {
+  position: relative; z-index: 3; flex: 0 0 42px; width: 42px; min-width: 42px;
+  display: flex; justify-content: center; padding: 5px 3px;
+  background: var(--c-panel); border-right: 1px solid var(--c-rule);
+}
+.drawing-toolbar {
+  width: 100%; display: flex; flex-direction: column; flex-wrap: nowrap;
+  align-items: center; gap: 5px; padding: 0; border: 0;
+}
+.drawing-tool-button {
+  flex: none; width: 34px; height: 34px; min-height: 34px; display: inline-flex;
+  align-items: center; justify-content: center; padding: 0; border: 1px solid transparent;
+  border-radius: 5px; background: transparent; color: var(--c-text); font-size: 19px;
+  line-height: 1; cursor: pointer; touch-action: manipulation;
+}
+.drawing-tool-button:hover,
+.drawing-tool-button[aria-pressed='true'] {
+  border-color: var(--c-accent); background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+}
+.drawing-tool-button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 1px; }
+.drawing-tool-cancel { color: var(--c-warn); }
+.toolbar-divider { width: 24px; height: 1px; flex: none; margin: 2px 0; background: var(--c-rule); }
+.chart-area { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.chart { position: absolute; inset: 0; }
+.legend { left: 10px; top: 8px; }
+.status {
+  position: absolute; z-index: 2; left: 6px; bottom: 5px; max-width: calc(100% - 12px);
+  overflow: hidden; margin: 0; padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--c-rule) 75%, transparent);
+  border-radius: 4px; background: color-mix(in srgb, var(--c-panel) 88%, transparent);
+  color: var(--c-muted); font-size: 10px; line-height: 1.3; white-space: nowrap;
+  text-overflow: ellipsis; pointer-events: none; font-variant-numeric: tabular-nums;
+}
+.badge-simulated {
+  position: absolute; z-index: 2; top: 5px; right: 6px; padding: 1px 6px;
+  border-radius: 4px; background: color-mix(in srgb, var(--c-panel) 88%, transparent); font-size: 10px;
+}
+@media (max-width: 600px) {
+  .topbar { gap: 6px; padding: 0 6px; }
+  .brand { font-size: 14px; }
+  .market-name { display: none; }
+  .market-select-label select { max-width: 82px; font-size: 12px; }
+  .refresh-button { padding: 0 7px; font-size: 11px; }
+  .toolbar-row { gap: 2px; padding: 0 4px; }
+  .toolbar-row > .menu-trigger { padding: 0 8px; font-size: 12px; }
+  .timeframe-button { padding: 0 7px; font-size: 11px; }
+  .side-toolbar { flex-basis: 40px; width: 40px; min-width: 40px; padding: 4px 2px; }
+  .drawing-tool-button { width: 33px; height: 33px; min-height: 33px; }
+  .legend { left: 6px; max-width: calc(100% - 12px); }
+  .status { max-width: calc(100% - 12px); }
+}
+@media (max-height: 420px) {
+  .side-toolbar { padding-top: 2px; }
+  .drawing-toolbar { gap: 2px; }
+  .drawing-tool-button { width: 30px; height: 30px; min-height: 30px; }
+}
