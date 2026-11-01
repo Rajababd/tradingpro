@@ -173,7 +173,7 @@ export class ChartController {
       this.#panes = panes;
       this.#series = series;
       this.#gestures = new UserGestureTracker(container);
-      this.#viewport = new ViewportController(chart, this.#gestures);
+      this.#viewport = new ViewportController(chart, this.#gestures, chart.timeScale());
       this.#crosshair = new CrosshairController(chart, () =>
         series.get<'Candlestick'>(PRICE_SERIES_ID),
       );
@@ -182,9 +182,7 @@ export class ChartController {
         typeof timeScale.subscribeVisibleLogicalRangeChange === 'function' &&
         typeof timeScale.unsubscribeVisibleLogicalRangeChange === 'function'
       ) {
-        const updatePriceScale = () => this.#updatePriceScaleWidth();
-        timeScale.subscribeVisibleLogicalRangeChange(updatePriceScale);
-        this.#priceScaleRangeHandler = () => timeScale.unsubscribeVisibleLogicalRangeChange(updatePriceScale);
+        this.#priceScaleRangeHandler = this.#viewport.subscribe(() => this.#updatePriceScaleWidth());
       }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
