@@ -59,7 +59,7 @@ beforeEach(() => {
 describe('indicators: lazy creation and display', () => {
   it('nothing is calculated or created until something is shown', () => {
     expect(engine.list()).toEqual([]);
-    expect(chart.panes).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(1);
     expect(addSeriesCalls()).toBe(1); // just the price series
     expect(ws.getSnapshot().indicators.every((r) => !r.displayed)).toBe(true);
     expect(ws.getSnapshot().smas.every((r) => !r.enabled)).toBe(true);
@@ -85,14 +85,14 @@ describe('indicators: lazy creation and display', () => {
     ws.setIndicatorDisplayed('rsi', false);
     expect(row('rsi').displayed).toBe(false);
     expect(vc.hasSeries('rsi:rsi')).toBe(false);
-    expect(chart.panes).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(1);
     expect(panes.has('rsi')).toBe(false);
     expect(engine.has('rsi')).toBe(true);
 
     ws.setIndicatorDisplayed('rsi', true);
     expect(seriesOf('rsi:rsi')).not.toBe(original);
     expect(addSeriesCalls()).toBe(created + 1);
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
     expect(row('rsi').displayed).toBe(true);
     expect(shown(seriesOf('rsi:rsi'))).toEqual([...engine.values('rsi', 'rsi')]);
   });
@@ -108,7 +108,7 @@ describe('indicators: lazy creation and display', () => {
       ws.toggleIndicator('macd');
     }
     expect(engine.list()).toHaveLength(instances);
-    expect(chart.panes).toHaveLength(3);
+    expect(chart.paneGroups).toHaveLength(3);
     expect(series.list().filter((item) => item.id === 'rsi:rsi')).toHaveLength(1);
     expect(series.list().filter((item) => item.id.startsWith('macd:'))).toHaveLength(3);
     expect(row('rsi').displayed && row('macd').displayed).toBe(true);
@@ -222,25 +222,25 @@ describe('indicators: lazy creation and display', () => {
 describe('MACD: three outputs in one pane (Scenario B)', () => {
   it('shows three series in one shared pane, and each output can be toggled independently', () => {
     ws.setIndicatorDisplayed('macd', true);
-    expect(chart.panes).toHaveLength(2);
-    expect(chart.panes[1]).toHaveLength(3);
+    expect(chart.paneGroups).toHaveLength(2);
+    expect(chart.paneGroups[1]).toHaveLength(3);
 
     ws.setOutputVisible('macd', 'signal', false);
     expect(row('macd').displayed).toBe(true);
     expect(row('macd').outputs.map((o) => o.visible)).toEqual([true, false, true]);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(1); // pane untouched
+    expect(chart.stretch.get(chart.paneGroups[1]!)).toBe(1); // pane untouched
 
     ws.setOutputVisible('macd', 'macd', false);
     ws.setOutputVisible('macd', 'histogram', false);
     expect(row('macd').displayed).toBe(false);
-    expect(chart.panes).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(1);
     expect(panes.has('macd')).toBe(false);
 
     ws.setOutputVisible('macd', 'signal', true);
     expect(row('macd').displayed).toBe(true);
     expect(row('macd').outputs.map((o) => o.visible)).toEqual([false, true, false]);
-    expect(chart.panes).toHaveLength(2);
-    expect(chart.panes[1]).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(2);
+    expect(chart.paneGroups[1]).toHaveLength(1);
   });
 
   it('the main switch shows all outputs, whatever their individual state, and hides them all', () => {
@@ -307,7 +307,7 @@ describe('SMA', () => {
   it('SMA on price: a line in the PRICE pane (no new pane), equal to SMA(20) of the closes', () => {
     ws.setSmaEnabled('price', true);
     const line = seriesOf('sma:price');
-    expect(chart.panes).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(1);
     expect(chart.paneIndexOf(line)).toBe(0);
     expect(shown(line)).toEqual(smaOver(candles.map((c) => c.close), 20));
     expect(shown(line).findIndex((v) => v !== null)).toBe(19);
@@ -360,7 +360,7 @@ describe('SMA', () => {
   it('SMA on an indicator output lives in THAT indicator\'s pane and uses exactly that output (Scenario D)', () => {
     ws.setIndicatorDisplayed('rsi', true);
     ws.setSmaEnabled('rsi:rsi', true);
-    expect(chart.panes).toHaveLength(2); // shares the RSI pane, no extra pane
+    expect(chart.paneGroups).toHaveLength(2); // shares the RSI pane, no extra pane
     const line = seriesOf('sma:rsi:rsi');
     expect(chart.paneIndexOf(line)).toBe(chart.paneIndexOf(seriesOf('rsi:rsi')));
     expect(shown(line)).toEqual(smaOver([...engine.values('rsi', 'rsi')], 20));
@@ -394,7 +394,7 @@ describe('SMA', () => {
 
     ws.setIndicatorDisplayed('rsi', true);
     expect(sma('rsi:rsi').sourceDisplayed).toBe(true);
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
   });
 
   it('SMA visibility and source visibility are independent in both directions (rule 9)', () => {
@@ -402,11 +402,11 @@ describe('SMA', () => {
     ws.setSmaEnabled('rsi:rsi', true);
     ws.setIndicatorDisplayed('rsi', false);
     expect(sma('rsi:rsi').enabled).toBe(true);
-    expect(chart.panes).toHaveLength(2); // the SMA keeps the pane materialized
+    expect(chart.paneGroups).toHaveLength(2); // the SMA keeps the pane materialized
     ws.setSmaEnabled('rsi:rsi', false);
-    expect(chart.panes).toHaveLength(1); // removing the last series deletes the pane
+    expect(chart.paneGroups).toHaveLength(1); // removing the last series deletes the pane
     ws.setIndicatorDisplayed('rsi', true);
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
     expect(sma('rsi:rsi').enabled).toBe(false); // showing the source does not switch the SMA back on
   });
 
@@ -446,7 +446,7 @@ describe('SMA', () => {
     expect(engine.list()).toHaveLength(before.instances);
     expect(series.list().filter((item) => item.id === 'sma:price')).toHaveLength(1);
     expect(series.list().filter((item) => item.id === 'sma:obv:obv')).toHaveLength(1);
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
   });
 });
 
