@@ -30,6 +30,7 @@ against the real library; re-run it before trusting this file after any upgrade.
 - Leaving the chart fires an event with no time/logical.
 - A viewport change under an idle pointer (e.g. `fitContent`) re-emits the crosshair for the candle now under it.
 - Touch: **press-and-hold** shows the crosshair, sliding while held moves it, the crosshair stays after release. A quick tap does nothing; a quick drag pans.
+- The chart is configured with `CrosshairMode.Normal`: the crosshair's x/y position follows the actual pointer/touch location instead of snapping magnetically to the nearest candle's plotted values.
 
 ## Coordinates and viewport (for Phase 7)
 - `logicalToCoordinate` / `coordinateToLogical` and `priceToCoordinate` / `coordinateToPrice` round-trip exactly.
@@ -51,7 +52,8 @@ against the real library; re-run it before trusting this file after any upgrade.
 - Stretch operations are local: collapsing or restoring one pane leaves every other pane's factor untouched, so restoring the saved factor reproduces the original layout exactly (checked to the pixel, and over 80+ hide/show cycles).
 - **`pane.setHeight(px)` rewrites the stretch factors of ALL panes** (they became 1.93 / 0.15 / 0.93 from 2 / 1 / 1). It is never used.
 - Dragging a separator with the mouse really resizes panes (the user changes stretch factors), so a pane's size is not a constant: it must be read and saved when hiding, never assumed.
-- Collapsing happens after `series.applyOptions({visible:false})`; hiding a series alone never changes pane size.
+- Collapsing happens after `series.applyOptions({visible:false})`; hiding a series alone never changes pane size. This remains the low-level hide behavior.
+- The indicator/SMA menus no longer use this collapse path: they remove the chart series, and the library deletes the pane when its final series is removed. Engine calculations and drawing JSON are retained; drawings reattach by stable series id when the series returns.
 
 ## Whitespace, line gaps and per-point colour (Phase 6, measured in the browser)
 - `series.data()` returns only real points. Whitespace items (`{ time }`) are accepted but are **not** listed (300 sent, 286 returned

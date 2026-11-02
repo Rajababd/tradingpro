@@ -155,6 +155,7 @@ with sync_playwright() as p:
     check("M4 after 25 remove/recreate cycles: one RSI series and no leaked panes",
           ev(f"{T}.chart.series.list().filter((s) => s.id === 'rsi:rsi').length") == 1 and ev(f"{T}.chart.series.get('rsi:rsi') !== window.__rsi") is True and ev("__h.paneRows().length") == 2)
     check("M4 ...and one calculation, correct data", ev(f"{T}.engine.list().length") == 1 and ev(f"__h.close(__h.shown('rsi:rsi'), {T}.engine.values('rsi','rsi'))"))
+    ev(f"() => {{ window.__rsi = {T}.chart.series.get('rsi:rsi'); }}")  # the currently materialized series after recreation
 
     # ---- M12: indicator settings
     page.get_by_role("button", name="RSI settings").click()
