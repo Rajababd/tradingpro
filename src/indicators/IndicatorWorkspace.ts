@@ -118,7 +118,7 @@ export class IndicatorWorkspace {
     } else {
       for (const output of definition.outputs) {
         const id = outputSeriesId(definitionId, output.key);
-        if (this.chart.visibility.hasSeries(id)) this.chart.visibility.setSeriesVisible(id, false);
+        if (this.chart.visibility.hasSeries(id)) this.chart.visibility.removeSeries(id);
       }
     }
     this.#refresh();
@@ -138,7 +138,7 @@ export class IndicatorWorkspace {
       this.chart.visibility.setSeriesVisible(this.#ensureOutputSeries(definitionId, outputKey), true);
     } else {
       const id = outputSeriesId(definitionId, outputKey);
-      if (this.chart.visibility.hasSeries(id)) this.chart.visibility.setSeriesVisible(id, false);
+      if (this.chart.visibility.hasSeries(id)) this.chart.visibility.removeSeries(id);
     }
     this.#refresh();
   }
@@ -159,7 +159,7 @@ export class IndicatorWorkspace {
       this.#ensureSma(sourceKey);
       this.chart.visibility.setSeriesVisible(smaSeriesId(sourceKey), true);
     } else if (this.chart.visibility.hasSeries(smaSeriesId(sourceKey))) {
-      this.chart.visibility.setSeriesVisible(smaSeriesId(sourceKey), false);
+      this.chart.visibility.removeSeries(smaSeriesId(sourceKey));
     }
     config.enabled = enabled;
     this.#refresh();
@@ -235,7 +235,9 @@ export class IndicatorWorkspace {
       paneId,
     });
     const list = this.#realized.get(instanceId) ?? [];
-    list.push(realized);
+    const existing = list.findIndex((item) => item.seriesId === realized.seriesId);
+    if (existing === -1) list.push(realized);
+    else list[existing] = realized;
     this.#realized.set(instanceId, list);
     this.#resetSeriesData(instanceId, realized);
   }
@@ -248,6 +250,9 @@ export class IndicatorWorkspace {
       return;
     }
     for (const realized of this.#realized.get(change.instanceId) ?? []) {
+      // The calculation remains alive while its chart series is removed. Recreating the
+      // series later repopulates it from the engine's complete cached column.
+      if (!this.chart.visibility.hasSeries(realized.seriesId)) continue;
       if (change.type === 'reset' || this.#closesGap(realized, this.engine.values(change.instanceId, realized.outputKey), change.index)) {
         // A point that ends an interior gap changes the colour of an OLDER point, which the library's update() cannot do.
         this.#resetSeriesData(change.instanceId, realized);
@@ -259,6 +264,7 @@ export class IndicatorWorkspace {
   }
 
   #resetSeriesData(instanceId: string, realized: Realized): void {
+    if (!this.chart.visibility.hasSeries(realized.seriesId)) return;
     const times = this.engine.times;
     const values = this.engine.values(instanceId, realized.outputKey);
     const candles = this.engine.candles;

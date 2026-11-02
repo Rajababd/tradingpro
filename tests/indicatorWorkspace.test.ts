@@ -77,35 +77,40 @@ describe('indicators: lazy creation and display', () => {
     expect(row('rsi').displayed).toBe(true);
   });
 
-  it('hiding keeps the calculation and series; showing again reuses the very same series (Scenario A)', () => {
+  it('removing the last indicator series deletes its pane but preserves calculation state', () => {
     ws.setIndicatorDisplayed('rsi', true);
     const original = seriesOf('rsi:rsi');
     const created = addSeriesCalls();
 
     ws.setIndicatorDisplayed('rsi', false);
     expect(row('rsi').displayed).toBe(false);
-    expect(original.options['visible']).toBe(false);
+    expect(vc.hasSeries('rsi:rsi')).toBe(false);
+    expect(chart.panes).toHaveLength(1);
+    expect(panes.has('rsi')).toBe(false);
     expect(engine.has('rsi')).toBe(true);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(0); // its pane collapsed
 
     ws.setIndicatorDisplayed('rsi', true);
-    expect(seriesOf('rsi:rsi')).toBe(original);
-    expect(addSeriesCalls()).toBe(created);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(1);
+    expect(seriesOf('rsi:rsi')).not.toBe(original);
+    expect(addSeriesCalls()).toBe(created + 1);
+    expect(chart.panes).toHaveLength(2);
     expect(row('rsi').displayed).toBe(true);
+    expect(shown(seriesOf('rsi:rsi'))).toEqual([...engine.values('rsi', 'rsi')]);
   });
 
-  it('50 hide/show cycles create nothing new and lose nothing', () => {
+  it('repeated remove/recreate cycles do not leak panes, duplicate series or calculations', () => {
     ws.setIndicatorDisplayed('macd', true);
     ws.setIndicatorDisplayed('rsi', true);
-    const before = { created: addSeriesCalls(), instances: engine.list().length, panes: chart.panes.length };
+    const instances = engine.list().length;
     for (let i = 0; i < 50; i++) {
       ws.setIndicatorDisplayed('rsi', false);
       ws.setIndicatorDisplayed('rsi', true);
       ws.toggleIndicator('macd');
       ws.toggleIndicator('macd');
     }
-    expect({ created: addSeriesCalls(), instances: engine.list().length, panes: chart.panes.length }).toEqual(before);
+    expect(engine.list()).toHaveLength(instances);
+    expect(chart.panes).toHaveLength(3);
+    expect(series.list().filter((item) => item.id === 'rsi:rsi')).toHaveLength(1);
+    expect(series.list().filter((item) => item.id.startsWith('macd:'))).toHaveLength(3);
     expect(row('rsi').displayed && row('macd').displayed).toBe(true);
     expect(shown(seriesOf('rsi:rsi'))).toEqual([...engine.values('rsi', 'rsi')]);
   });
@@ -118,10 +123,11 @@ describe('indicators: lazy creation and display', () => {
     engine.update({ ...more[80]!, close: more[80]!.close + 1, high: more[80]!.high + 1 });
     engine.append(more[81]!);
 
+    expect(vc.hasSeries('rsi:rsi')).toBe(false);
+    expect(engine.values('rsi', 'rsi')).toHaveLength(82);
+    ws.setIndicatorDisplayed('rsi', true);
     const rsi = seriesOf('rsi:rsi');
     expect(rsi.data).toHaveLength(82);
-    expect(shown(rsi)).toEqual([...engine.values('rsi', 'rsi')]);
-    ws.setIndicatorDisplayed('rsi', true);
     expect(shown(rsi)).toEqual([...engine.values('rsi', 'rsi')]);
   });
 
@@ -132,6 +138,8 @@ describe('indicators: lazy creation and display', () => {
     const fresh = randomCandles(120, 9);
     engine.prepend(fresh);
     expect(shown(seriesOf('rsi:rsi'))).toEqual([...engine.values('rsi', 'rsi')]);
+    expect(vc.hasSeries('obv:obv')).toBe(false);
+    ws.setIndicatorDisplayed('obv', true);
     expect(shown(seriesOf('obv:obv'))).toEqual([...engine.values('obv', 'obv')]);
     expect(seriesOf('rsi:rsi').data).toHaveLength(120);
   });
@@ -225,12 +233,14 @@ describe('MACD: three outputs in one pane (Scenario B)', () => {
     ws.setOutputVisible('macd', 'macd', false);
     ws.setOutputVisible('macd', 'histogram', false);
     expect(row('macd').displayed).toBe(false);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(0);
+    expect(chart.panes).toHaveLength(1);
+    expect(panes.has('macd')).toBe(false);
 
     ws.setOutputVisible('macd', 'signal', true);
     expect(row('macd').displayed).toBe(true);
     expect(row('macd').outputs.map((o) => o.visible)).toEqual([false, true, false]);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(1);
+    expect(chart.panes).toHaveLength(2);
+    expect(chart.panes[1]).toHaveLength(1);
   });
 
   it('the main switch shows all outputs, whatever their individual state, and hides them all', () => {
@@ -304,17 +314,17 @@ describe('SMA', () => {
     expect(sma('price')).toMatchObject({ enabled: true, period: 20, sourceDisplayed: null });
   });
 
-  it('disabling only hides the line: calculation, series and period stay; re-enabling reuses them', () => {
+  it('disabling removes the SMA series but preserves its calculation and period', () => {
     ws.setSmaEnabled('price', true);
     const line = seriesOf('sma:price');
     const created = addSeriesCalls();
     ws.setSmaEnabled('price', false);
-    expect(line.options['visible']).toBe(false);
+    expect(vc.hasSeries('sma:price')).toBe(false);
     expect(engine.has('sma-price')).toBe(true);
     expect(sma('price')).toMatchObject({ enabled: false, period: 20 });
     ws.setSmaEnabled('price', true);
-    expect(seriesOf('sma:price')).toBe(line);
-    expect(addSeriesCalls()).toBe(created);
+    expect(seriesOf('sma:price')).not.toBe(line);
+    expect(addSeriesCalls()).toBe(created + 1);
   });
 
   it('changing the period recalculates correctly, both while shown and while off (Scenario C)', () => {
@@ -329,7 +339,7 @@ describe('SMA', () => {
     expect(sma('price')).toMatchObject({ enabled: false, period: 10 });
     ws.setSmaEnabled('price', true);
     expect(sma('price')).toMatchObject({ enabled: true, period: 10 });
-    expect(shown(line)).toEqual(smaOver(candles.map((c) => c.close), 10));
+    expect(shown(seriesOf('sma:price'))).toEqual(smaOver(candles.map((c) => c.close), 10));
   });
 
   it('a period chosen before the SMA was ever enabled is used on first enable', () => {
@@ -392,10 +402,11 @@ describe('SMA', () => {
     ws.setSmaEnabled('rsi:rsi', true);
     ws.setIndicatorDisplayed('rsi', false);
     expect(sma('rsi:rsi').enabled).toBe(true);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(1); // the SMA keeps the pane open
+    expect(chart.panes).toHaveLength(2); // the SMA keeps the pane materialized
     ws.setSmaEnabled('rsi:rsi', false);
-    expect(chart.stretch.get(chart.panes[1]!)).toBe(0);
+    expect(chart.panes).toHaveLength(1); // removing the last series deletes the pane
     ws.setIndicatorDisplayed('rsi', true);
+    expect(chart.panes).toHaveLength(2);
     expect(sma('rsi:rsi').enabled).toBe(false); // showing the source does not switch the SMA back on
   });
 

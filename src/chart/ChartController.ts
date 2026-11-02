@@ -1,6 +1,7 @@
 import {
   CandlestickSeries,
   ColorType,
+  CrosshairMode,
   createChart,
   type CandlestickData,
   type IChartApi,
@@ -151,6 +152,7 @@ export class ChartController {
       grid: { vertLines: { color: t.rule }, horzLines: { color: t.rule } },
       rightPriceScale: { borderColor: t.rule },
       timeScale: { borderColor: t.rule },
+      crosshair: { mode: CrosshairMode.Normal },
     });
 
     try {

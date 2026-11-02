@@ -106,15 +106,19 @@ export class VisibilityController {
   /** Removes a series for good (not hiding). The price series cannot be removed. */
   removeSeries(id: SeriesId): void {
     const paneId = this.series.list().find((s) => s.id === id)?.paneId;
-    // The library deletes a pane when its last series goes. Remember the size it had (unless it is
-    // collapsed, in which case the size saved at collapse time is the real one) for when it returns.
-    if (paneId !== undefined && this.model.seriesInPane(paneId).length === 1 && !this.#collapsed.has(paneId)) {
-      const current = this.series.require(id).getPane().getStretchFactor();
-      if (current > 0 && !this.series.isProtected(id)) this.#savedStretch.set(paneId, current);
-    }
     this.series.remove(id); // throws for unknown or protected ids, before anything changes
     this.model.unregisterSeries(id);
-    if (paneId !== undefined) this.#syncPane(paneId, false);
+    if (paneId !== undefined) {
+      if (this.model.seriesInPane(paneId).length === 0) {
+        // The chart library has now removed the empty pane. Forget its logical slot and
+        // sizing state too, so the next activation creates a genuinely fresh pane.
+        this.#collapsed.delete(paneId);
+        this.#savedStretch.delete(paneId);
+        this.panes.forget(paneId);
+      } else {
+        this.#syncPane(paneId, false);
+      }
+    }
     this.#publish();
   }
 

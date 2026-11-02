@@ -26,6 +26,7 @@ vi.mock('lightweight-charts', () => ({
   createChart: mocks.createChart,
   CandlestickSeries: { type: 'Candlestick' },
   ColorType: { Solid: 'solid' },
+  CrosshairMode: { Normal: 0 },
 }));
 
 import { ChartController, PRICE_PANE_INDEX } from '../src/chart/ChartController';
@@ -53,10 +54,14 @@ describe('ChartController', () => {
     expect(c.isMounted).toBe(true);
   });
 
-  it('enables library auto-sizing for responsive resizing', () => {
+  it('enables library auto-sizing and free-position crosshair mode', () => {
     new ChartController(theme).mount(document.createElement('div'));
-    const options = (mocks.createChart.mock.calls[0] as unknown[])[1] as { autoSize: boolean };
+    const options = (mocks.createChart.mock.calls[0] as unknown[])[1] as {
+      autoSize: boolean;
+      crosshair: { mode: number };
+    };
     expect(options.autoSize).toBe(true);
+    expect(options.crosshair.mode).toBe(0); // CrosshairMode.Normal
   });
 
   it('mounting the same container twice does not create a second chart', () => {
