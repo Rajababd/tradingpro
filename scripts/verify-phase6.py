@@ -142,17 +142,20 @@ with sync_playwright() as p:
     check("M3 the menu stays open while toggling (several can be switched)", page.locator("#menu-indicators").count() == 1)
     ev(f"() => {{ window.__rsi = {T}.chart.series.get('rsi:rsi'); }}")
     check("M3 RSI data in the chart equals the engine's RSI, warm-up as gaps", ev(f"__h.close(__h.shown('rsi:rsi'), {T}.engine.values('rsi','rsi'))") and ev("__h.shown('rsi:rsi').slice(0, 14).every((v) => v === null)"))
+    ev(f"""() => {{ const times = {T}.engine.times; window.__paneDrawing = {T}.chart.drawings.create('trend-line', 'pane-rsi-persistence', 'rsi:rsi', [{{ time: times[30], price: 50 }}, {{ time: times[60], price: 60 }}]); }}""")
+    check("M3 a drawing on the RSI pane is initially attached", ev("window.__paneDrawing.isAttached()"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
-    check("M3 clicking again hides it: its pane collapses, nothing removed", ev("__h.paneRows()[1]") <= 3 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')"))
+    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
     Hs = ev("__h.paneRows()")
-    check("M3 showing it again restores the pane to its earlier size", ev("__h.paneRows().length") == 2 and Hs[1] > 40, Hs)
+    check("M3 showing RSI again creates a fresh pane, restores cached values and reattaches its drawing", ev("__h.paneRows().length") == 2 and Hs[1] > 40 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"), Hs)
     for _ in range(24):
         switch("data-indicator", "rsi").click(); switch("data-indicator", "rsi").click()
     page.wait_for_timeout(200)
-    check("M4 after 25 real hide/show cycles: still ONE RSI series, the same object, same pane size",
-          ev(f"{T}.chart.series.list().filter((s) => s.id === 'rsi:rsi').length") == 1 and ev(f"{T}.chart.series.get('rsi:rsi') === window.__rsi") is True and abs(ev("__h.paneRows()[1]") - Hs[1]) <= 1)
+    check("M4 after 25 remove/recreate cycles: one RSI series and no leaked panes",
+          ev(f"{T}.chart.series.list().filter((s) => s.id === 'rsi:rsi').length") == 1 and ev(f"{T}.chart.series.get('rsi:rsi') !== window.__rsi") is True and ev("__h.paneRows().length") == 2)
     check("M4 ...and one calculation, correct data", ev(f"{T}.engine.list().length") == 1 and ev(f"__h.close(__h.shown('rsi:rsi'), {T}.engine.values('rsi','rsi'))"))
+    ev(f"() => {{ window.__rsi = {T}.chart.series.get('rsi:rsi'); }}")  # the currently materialized series after recreation
 
     # ---- M12: indicator settings
     page.get_by_role("button", name="RSI settings").click()
@@ -179,10 +182,10 @@ with sync_playwright() as p:
     macd_h = ev("__h.paneRows()[2]")
     check("B hiding two of three lines leaves the pane open at full size", macd_h > 40 and ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'macd').displayed"), macd_h)
     page.locator("[data-indicator='macd'] .chip", has_text="Histogram").click(); page.wait_for_timeout(120)
-    check("B hiding the last line collapses the pane and the indicator reads as not displayed", ev("__h.paneRows()[2]") <= 3 and not ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'macd').displayed"))
+    check("B removing the last line deletes the empty MACD pane and marks the indicator off", ev("__h.paneRows().length") == 2 and not ev(f"{T}.chart.series.has('macd:histogram')") and not ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'macd').displayed"))
     page.locator("[data-indicator='macd'] .chip", has_text="Signal").click(); page.wait_for_timeout(120)
-    check("B showing one line brings the pane back; the other two stay hidden",
-          ev("__h.paneRows()[2]") > 40 and ev(f"{T}.chart.series.get('macd:macd').options().visible") is False and ev(f"{T}.chart.series.get('macd:signal').options().visible") is not False)
+    check("B showing one line creates a fresh MACD pane; the other outputs stay absent",
+          ev("__h.paneRows().length") == 3 and not ev(f"{T}.chart.series.has('macd:macd')") and ev(f"{T}.chart.series.has('macd:signal')") and not ev(f"{T}.chart.series.has('macd:histogram')"))
     f_fast = page.locator("[data-indicator='macd'] .field input").first
     f_fast.fill("40"); f_fast.press("Enter"); page.wait_for_timeout(100)
     check("M12 MACD: fast not shorter than slow is refused with the reason", "shorter than the slow" in page.locator("[data-indicator='macd'] .error").first.inner_text() and ev(f"{T}.engine.get('macd').params.fast") == 12)
@@ -222,10 +225,10 @@ with sync_playwright() as p:
     f.fill("50"); f.press("Enter"); page.wait_for_timeout(200)
     check("M6 changing the period to 50 recalculates correctly, in the same series", ev(f"__h.close(__h.shown('sma:price'), __h.sma({T}.service.candles.map((c) => c.close), 50))") and ev(f"{T}.chart.series.get('sma:price') === window.__smaPrice") is True)
     switch("data-sma-source", "price").click(); page.wait_for_timeout(150)
-    check("M6 turning it off hides the line but keeps its calculation and its period",
-          ev(f"{T}.chart.series.get('sma:price').options().visible") is False and ev(f"{T}.engine.has('sma-price')") and f.input_value() == "50")
+    check("M6 turning it off removes the price SMA series but keeps its calculation and period",
+          not ev(f"{T}.chart.series.has('sma:price')") and ev(f"{T}.engine.has('sma-price')") and f.input_value() == "50")
     switch("data-sma-source", "price").click(); page.wait_for_timeout(150)
-    check("M6 turning it back on shows the same series with period 50 intact", ev(f"{T}.chart.series.get('sma:price') === window.__smaPrice") is True and f.input_value() == "50" and ev(f"{T}.chart.series.get('sma:price').options().visible") is not False)
+    check("M6 turning it back on recreates the SMA series with period 50 intact", ev(f"{T}.chart.series.get('sma:price') !== window.__smaPrice") is True and f.input_value() == "50" and ev(f"{T}.chart.series.has('sma:price')"))
     for _ in range(15):
         switch("data-sma-source", "price").click(); switch("data-sma-source", "price").click()
     check("M6 repeated toggling creates no duplicate series", ev(f"{T}.chart.series.list().filter((s) => s.id === 'sma:price').length") == 1)
