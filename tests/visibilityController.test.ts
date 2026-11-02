@@ -41,7 +41,7 @@ describe('VisibilityController: hiding a series versus hiding a pane', () => {
     vc.setSeriesVisible('rsi', false);
     expect(stretchOf(rsi)).toBe(0);
     expect(chart.removeSeries).not.toHaveBeenCalled();
-    expect(chart.panes).toHaveLength(2); // the pane and its series still exist
+    expect(chart.paneGroups).toHaveLength(2); // the pane and its series still exist
     expect(vc.isPaneVisible('rsi')).toBe(false);
   });
 
@@ -209,7 +209,7 @@ describe('creating hidden, removing, and re-adding', () => {
     const macd = add('macd-line', 'macd');
 
     vc.removeSeries('rsi-line');
-    expect(chart.panes).toHaveLength(3);
+    expect(chart.paneGroups).toHaveLength(3);
     expect(panes.has('rsi')).toBe(false);
     expect(panes.order).toEqual(['price', 'volume', 'macd']);
 

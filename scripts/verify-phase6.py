@@ -145,7 +145,7 @@ with sync_playwright() as p:
     ev(f"""() => {{ const times = {T}.engine.times; window.__paneDrawing = {T}.chart.drawings.create('trend-line', 'pane-rsi-persistence', 'rsi:rsi', [{{ time: times[30], price: 50 }}, {{ time: times[60], price: 60 }}]); }}""")
     check("M3 a drawing on the RSI pane is initially attached", ev("window.__paneDrawing.isAttached()"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
-    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
+    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.paneCount") == 1 and ev(f"{T}.chart.paneSeriesCounts") == [1] and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
     Hs = ev("__h.paneRows()")
     check("M3 showing RSI again creates a fresh pane, restores cached values and reattaches its drawing", ev("__h.paneRows().length") == 2 and Hs[1] > 40 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"), Hs)
@@ -357,6 +357,33 @@ with sync_playwright() as p:
                             ("phone landscape 640x360", {"width": 640, "height": 360}, True), ("tablet 768x1024", {"width": 768, "height": 1024}, True)]:
         pg, errs = new_page(browser, viewport=vp, has_touch=touch, is_mobile=True, device_scale_factor=2)
         e2 = pg.evaluate
+        chart_box = pg.locator("[data-testid=chart]").bounding_box()
+        touch_x = chart_box["x"] + 137
+        touch_y = chart_box["y"] + 173
+        pg.evaluate("""({x,y}) => {
+          const target = document.querySelector('[data-testid=chart]');
+          const send = (type, px, py, buttons) => target.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, pointerId: 77, pointerType: 'touch', clientX: px, clientY: py, buttons
+          }));
+          send('pointerdown', x, y, 1);
+          send('pointermove', x + 19, y + 23, 1);
+          window.__touchCrosshairExpected = { x: x + 19, y: y + 23 };
+        }""", {"x": touch_x, "y": touch_y})
+        pg.wait_for_timeout(50)
+        crosshair_pos = e2("""(() => {
+          const chart = document.querySelector('[data-testid=chart]');
+          const layer = chart.querySelector('.touch-crosshair');
+          const v = layer.querySelector('.touch-crosshair__vertical');
+          const h = layer.querySelector('.touch-crosshair__horizontal');
+          const r = chart.getBoundingClientRect();
+          return { visible: layer.dataset.visible, left: parseFloat(v.style.left), top: parseFloat(h.style.top),
+            expectedX: window.__touchCrosshairExpected.x - r.left, expectedY: window.__touchCrosshairExpected.y - r.top };
+        })()""")
+        check(f"M15 {name}: touch crosshair follows the exact finger coordinates", crosshair_pos["visible"] == "true" and abs(crosshair_pos["left"] - crosshair_pos["expectedX"]) < 1 and abs(crosshair_pos["top"] - crosshair_pos["expectedY"]) < 1, crosshair_pos)
+        pg.evaluate("""() => document.querySelector('[data-testid=chart]').dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, pointerId: 77, pointerType: 'touch', clientX: window.__touchCrosshairExpected.x,
+          clientY: window.__touchCrosshairExpected.y, buttons: 0
+        }))""")
         for menu_name, mid in [("Indicators", "menu-indicators"), ("SMA", "menu-sma")]:
             tr = pg.get_by_role("button", name=menu_name).first
             tb = tr.bounding_box()

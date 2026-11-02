@@ -30,14 +30,14 @@ describe('SeriesManager: creation', () => {
     addPrice();
     expect(() => addPrice()).toThrow(/already exists/);
     expect(chart.addSeries).toHaveBeenCalledTimes(1);
-    expect(chart.panes).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(1);
   });
 
   it('places a series in an existing pane without creating another pane (shared pane)', () => {
     addPrice();
     line('rsi', 'rsi');
     line('rsi-sma', 'rsi');
-    expect(chart.panes.map((p) => p.length)).toEqual([1, 2]);
+    expect(chart.paneGroups.map((p) => p.length)).toEqual([1, 2]);
   });
 
   it('honours logical pane order even when panes are created out of order', () => {
@@ -64,7 +64,7 @@ describe('SeriesManager: creation', () => {
     expect(series.has('rsi')).toBe(false);
     expect(panes.isMaterialized('rsi')).toBe(false);
     expect(() => line('rsi', 'rsi')).not.toThrow();
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
   });
 
   it('rolls the series back if moving its pane into place fails', () => {
@@ -76,7 +76,7 @@ describe('SeriesManager: creation', () => {
     expect(() => line('rsi', 'rsi')).toThrow('swapPanes failed');
     expect(series.has('rsi')).toBe(false);
     expect(panes.isMaterialized('rsi')).toBe(false);
-    expect(chart.panes).toHaveLength(2); // price + macd; the half-placed pane is gone
+    expect(chart.paneGroups).toHaveLength(2); // price + macd; the half-placed pane is gone
   });
 });
 
@@ -89,7 +89,7 @@ describe('SeriesManager: hide and show (Scenario A)', () => {
     expect(rsi.options['visible']).toBe(false);
     expect(series.isVisible('rsi')).toBe(false);
     expect(series.has('rsi')).toBe(true);
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
     expect(chart.removeSeries).not.toHaveBeenCalled();
   });
 
@@ -102,7 +102,7 @@ describe('SeriesManager: hide and show (Scenario A)', () => {
     }
     expect(series.list().filter((s) => s.id === 'rsi')).toHaveLength(1);
     expect(chart.addSeries).toHaveBeenCalledTimes(2); // price + rsi, once each
-    expect(chart.panes.map((p) => p.length)).toEqual([1, 1]);
+    expect(chart.paneGroups.map((p) => p.length)).toEqual([1, 1]);
     expect(series.isVisible('rsi')).toBe(true);
   });
 
@@ -118,15 +118,15 @@ describe('SeriesManager: shared pane (Scenario B)', () => {
     line('rsi-sma', 'rsi');
 
     series.setVisible('rsi', false);
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
     expect(series.isVisible('rsi-sma')).toBe(true);
 
     series.remove('rsi');
-    expect(chart.panes).toHaveLength(2);
+    expect(chart.paneGroups).toHaveLength(2);
     expect(panes.isMaterialized('rsi')).toBe(true);
 
     series.remove('rsi-sma');
-    expect(chart.panes).toHaveLength(1);
+    expect(chart.paneGroups).toHaveLength(1);
     expect(panes.isMaterialized('rsi')).toBe(false);
   });
 });
@@ -144,6 +144,16 @@ describe('SeriesManager: removal', () => {
     line('rsi', 'rsi');
     series.remove('rsi');
     expect(() => series.remove('rsi')).toThrow(/unknown series/i);
+  });
+
+  it('explicitly removes an empty pane when the chart preserves it', () => {
+    addPrice();
+    chart.preserveEmptyPanes = true;
+    line('rsi', 'rsi');
+    series.remove('rsi');
+    expect(chart.paneGroups).toHaveLength(1);
+    expect(chart.removePane).toHaveBeenCalledWith(1);
+    expect(panes.isMaterialized('rsi')).toBe(false);
   });
 
   it('a removed pane returns to its previous logical slot when re-added', () => {
