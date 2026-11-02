@@ -202,31 +202,32 @@ describe('creating hidden, removing, and re-adding', () => {
     expect(chart.stretchCalls).toEqual([]);
   });
 
-  it('removing the last series deletes the pane and its logical slot; re-adding creates a fresh pane at the end', () => {
+  it('removing the last series deletes the pane; re-adding puts it back in its slot at its remembered size', () => {
     ['volume', 'rsi', 'macd'].forEach((p) => panes.register(p));
     add('vol', 'volume');
-    add('rsi-line', 'rsi');
+    const rsi = add('rsi-line', 'rsi');
     const macd = add('macd-line', 'macd');
+    rsi.getPane().setStretchFactor(4);
 
     vc.removeSeries('rsi-line');
     expect(chart.panes).toHaveLength(3);
-    expect(panes.has('rsi')).toBe(false);
-    expect(panes.order).toEqual(['price', 'volume', 'macd']);
+    expect(vc.isPaneVisible('rsi')).toBe(false);
+    expect(panes.order).toEqual(['price', 'volume', 'rsi', 'macd']); // slot kept
 
     const again = add('rsi-line', 'rsi');
-    expect(indexOf(macd)).toBe(2);
-    expect(indexOf(again)).toBe(3);
-    expect(stretchOf(again)).toBe(1); // a genuinely new pane starts at its default size
+    expect(indexOf(again)).toBe(2);
+    expect(indexOf(macd)).toBe(3);
+    expect(stretchOf(again)).toBe(4); // the size the user had before it was removed
   });
 
-  it('removing the last series of a collapsed pane also clears its old size; re-add starts fresh', () => {
+  it('removing the last series of a COLLAPSED pane does not leave it stuck at size 0 when it returns', () => {
     const rsi = add('rsi', 'rsi');
     rsi.getPane().setStretchFactor(3);
     vc.setSeriesVisible('rsi', false);
     vc.removeSeries('rsi');
 
     const again = add('rsi', 'rsi');
-    expect(stretchOf(again)).toBe(1);
+    expect(stretchOf(again)).toBe(3);
     expect(vc.isPaneVisible('rsi')).toBe(true);
   });
 
