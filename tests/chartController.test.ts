@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => {
     subscribeClick: vi.fn(),
     unsubscribeClick: vi.fn(),
     remove: vi.fn(),
+    options: vi.fn(() => ({ crosshair: { vertLine: { visible: true }, horzLine: { visible: true } } })),
+    applyOptions: vi.fn(),
+    panes: vi.fn(() => [{ getSeries: () => [series] }]),
+    removePane: vi.fn(),
   };
   return { series, timeScale, chart, createChart: vi.fn(() => chart) };
 });

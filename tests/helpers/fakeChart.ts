@@ -29,7 +29,8 @@ export interface FakeSeries {
 type Handler = (...args: never[]) => void;
 
 export class FakeChart {
-  panes: FakeSeries[][] = [];
+  paneGroups: FakeSeries[][] = [];
+  preserveEmptyPanes = false;
   /** Stretch factor per pane, keyed by the pane's array so it follows the pane through swaps. LW's first pane defaults to 2, others 1. */
   stretch = new WeakMap<FakeSeries[], number>();
   /** Every setStretchFactor call, in order, as [paneIndex at the time, value]. */
@@ -60,7 +61,7 @@ export class FakeChart {
         setData: vi.fn(),
         update: vi.fn(),
         getPane: () => {
-          const find = () => this.panes.find((pane) => pane.includes(series));
+          const find = () => this.paneGroups.find((pane) => pane.includes(series));
           return {
             getStretchFactor: () => this.stretch.get(find()!) ?? 1,
             setStretchFactor: (value: number) => {
@@ -79,22 +80,31 @@ export class FakeChart {
         else if (last === undefined || point.time > last.time) series.data.push(point);
         else throw new Error('Cannot update oldest data');
       });
-      const index = Math.min(paneIndex, this.panes.length);
-      if (index === this.panes.length) {
+      const index = Math.min(paneIndex, this.paneGroups.length);
+      if (index === this.paneGroups.length) {
         const pane = [series];
-        this.stretch.set(pane, this.panes.length === 0 ? 2 : 1);
-        this.panes.push(pane);
-      } else this.panes[index]!.push(series);
+        this.stretch.set(pane, this.paneGroups.length === 0 ? 2 : 1);
+        this.paneGroups.push(pane);
+      } else this.paneGroups[index]!.push(series);
       return series;
     },
   );
 
+  panes = vi.fn(() => this.paneGroups.map((group, index) => ({ getSeries: () => group, paneIndex: () => index })) as never);
+  removePane = vi.fn((index: number): void => {
+    if (index <= 0 || index >= this.paneGroups.length) throw new Error('Invalid pane index');
+    if (this.paneGroups[index]!.length !== 0) throw new Error('Cannot remove a non-empty pane');
+    this.paneGroups.splice(index, 1);
+  });
+  options = vi.fn(() => ({ crosshair: { vertLine: { visible: true }, horzLine: { visible: true } } }));
+  applyOptions = vi.fn();
+
   removeSeries = vi.fn((series: FakeSeries): void => {
     const paneIndex = this.paneIndexOf(series);
     if (paneIndex === -1) throw new Error('Value is undefined');
-    const pane = this.panes[paneIndex]!;
+    const pane = this.paneGroups[paneIndex]!;
     pane.splice(pane.indexOf(series), 1);
-    if (pane.length === 0) this.panes.splice(paneIndex, 1);
+    if (pane.length === 0 && !this.preserveEmptyPanes) this.paneGroups.splice(paneIndex, 1);
   });
 
   swapPanes = vi.fn((first: number, second: number): void => {
@@ -102,11 +112,11 @@ export class FakeChart {
       this.failNextSwap = false;
       throw new Error('swapPanes failed');
     }
-    const a = this.panes[first];
-    const b = this.panes[second];
+    const a = this.paneGroups[first];
+    const b = this.paneGroups[second];
     if (a === undefined || b === undefined) throw new Error('Invalid pane index');
-    this.panes[first] = b;
-    this.panes[second] = a;
+    this.paneGroups[first] = b;
+    this.paneGroups[second] = a;
   });
 
   subscribeCrosshairMove = vi.fn((h: Handler) => void this.crosshairHandlers.add(h));
@@ -125,7 +135,7 @@ export class FakeChart {
   timeScale = vi.fn(() => this.#timeScale);
 
   paneIndexOf(series: FakeSeries): number {
-    return this.panes.findIndex((pane) => pane.includes(series));
+    return this.paneGroups.findIndex((pane) => pane.includes(series));
   }
 
   emitCrosshair(param: unknown): void {
