@@ -9,6 +9,7 @@ vi.mock('lightweight-charts', () => ({
   createChart: vi.fn(() => h.chart),
   CandlestickSeries: { type: 'Candlestick' },
   ColorType: { Solid: 'solid' },
+  CrosshairMode: { Normal: 0 },
 }));
 
 import { ChartController } from '../src/chart/ChartController';
