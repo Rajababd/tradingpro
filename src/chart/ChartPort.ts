@@ -13,6 +13,8 @@ export type ChartPort = Pick<
   IChartApi,
   | 'addSeries'
   | 'removeSeries'
+  | 'panes'
+  | 'removePane'
   | 'swapPanes'
   | 'timeScale'
   | 'subscribeCrosshairMove'

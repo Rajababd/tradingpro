@@ -14,6 +14,7 @@ import { DrawingController } from './DrawingController';
 import { PRICE_PANE_ID, PaneManager } from './PaneManager';
 import { PRICE_SERIES_ID, SeriesManager, type SeriesReader } from './SeriesManager';
 import { UserGestureTracker } from './UserGestureTracker';
+import { TouchCrosshairOverlay } from './TouchCrosshairOverlay';
 import { ViewportController } from './ViewportController';
 import { VisibilityController } from './VisibilityController';
 import { VisibilityModel } from './VisibilityModel';
@@ -51,6 +52,7 @@ export class ChartController {
   #crosshair: CrosshairController | null = null;
   #drawings: DrawingController | null = null;
   #gestures: UserGestureTracker | null = null;
+  #touchCrosshair: TouchCrosshairOverlay | null = null;
   #priceScaleRangeHandler: (() => void) | null = null;
   #priceScaleWidth = 64;
   #priceCandles: Candle[] = [];
@@ -99,6 +101,16 @@ export class ChartController {
 
   get isMounted(): boolean {
     return this.#chart !== null;
+  }
+
+  /** Actual Lightweight Charts pane count, not inferred from DOM separators. */
+  get paneCount(): number {
+    return this.#chart?.panes().length ?? 0;
+  }
+
+  /** Number of real series in each actual chart pane, in visual order. */
+  get paneSeriesCounts(): readonly number[] {
+    return this.#chart?.panes().map((pane) => pane.getSeries().length) ?? [];
   }
 
   /** Read-only view of the chart's series. To add, hide, show or remove, use `visibility`. Available after mount. */
@@ -155,6 +167,7 @@ export class ChartController {
       crosshair: { mode: CrosshairMode.Normal },
     });
 
+    let touchCrosshair: TouchCrosshairOverlay | null = null;
     try {
       const panes = new PaneManager();
       const series = new SeriesManager(chart, panes, new Set([PRICE_SERIES_ID]));
@@ -188,12 +201,15 @@ export class ChartController {
       }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
+      touchCrosshair = new TouchCrosshairOverlay(chart, container);
     } catch (error) {
+      touchCrosshair?.dispose();
       chart.remove(); // never leave a half-built chart behind
       throw error;
     }
     this.#chart = chart;
     this.#container = container;
+    this.#touchCrosshair = touchCrosshair;
   }
 
   /**
@@ -251,6 +267,8 @@ export class ChartController {
     this.#priceScaleRangeHandler?.();
     this.#priceScaleRangeHandler = null;
     this.#drawings?.dispose();
+    this.#touchCrosshair?.dispose();
+    this.#touchCrosshair = null;
     this.#crosshair?.dispose();
     this.#viewport?.dispose();
     this.#gestures?.dispose();

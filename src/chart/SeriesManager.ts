@@ -150,6 +150,15 @@ export class SeriesManager {
     this.#entries.delete(id);
     // The chart deletes a pane when its last series goes; the logical slot is kept.
     this.panes.noteSeriesRemoved(entry.paneId);
+    this.#pruneEmptyPanes();
+  }
+
+  /** Remove every empty non-price pane explicitly, including panes preserved by the chart library. */
+  #pruneEmptyPanes(): void {
+    const current = this.chart.panes();
+    for (let index = current.length - 1; index > 0; index--) {
+      if (current[index]!.getSeries().length === 0) this.chart.removePane(index);
+    }
   }
 
   /** Drops references only. The chart itself is destroyed separately. */

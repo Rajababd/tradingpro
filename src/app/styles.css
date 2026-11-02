@@ -116,6 +116,12 @@ body {
   outline-offset: 2px;
 }
 
+.touch-crosshair { position: absolute; inset: 0; z-index: 5; display: none; pointer-events: none; }
+.touch-crosshair[data-visible='true'] { display: block; }
+.touch-crosshair__vertical, .touch-crosshair__horizontal { position: absolute; background: var(--c-accent); opacity: 0.9; pointer-events: none; }
+.touch-crosshair__vertical { top: 0; bottom: 0; width: 1px; transform: translateX(-0.5px); }
+.touch-crosshair__horizontal { left: 0; right: 0; height: 1px; transform: translateY(-0.5px); }
+
 .legend {
   position: absolute;
   top: 8px;
