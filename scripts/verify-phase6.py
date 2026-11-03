@@ -371,7 +371,8 @@ with sync_playwright() as p:
             identifier: 77, target, clientX: px, clientY: py, pageX: px, pageY: py,
             screenX: px, screenY: py, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
           });
-          window.__touchCrosshairExpected = { x: x + 17.3, y: y + 23.7 };
+          const rect = document.querySelector('[data-testid=chart]').getBoundingClientRect();
+          window.__touchCrosshairExpected = { x: x + 17.3, y: y + 23.7, localX: x + 17.3 - rect.left, localY: y + 23.7 - rect.top };
           const start = makeTouch(x, y);
           target.dispatchEvent(new TouchEvent('touchstart', {
             bubbles: true, cancelable: true, touches: [start], targetTouches: [start], changedTouches: [start]
@@ -395,13 +396,13 @@ with sync_playwright() as p:
           return {
             customOverlayAbsent: document.querySelector('[data-testid=chart] .touch-crosshair') === null,
             activeEvents: active.length,
-            fractionalLogical: active.some((m) => Math.abs(m.logical - Math.round(m.logical)) > 0.02),
-            logicalValues: active.map((m) => m.logical),
+            pointMatchesFinger: active.some((m) => m.point && Math.abs(m.point.x - window.__touchCrosshairExpected.localX) < 1 && Math.abs(m.point.y - window.__touchCrosshairExpected.localY) < 1),
+            points: active.map((m) => m.point),
             lastLogical: active.length ? active[active.length - 1].logical : null
           };
         })()""")
         check(f"M15 {name}: Lightweight Charts native crosshair follows touch at a free logical position",
-              crosshair_state["customOverlayAbsent"] and crosshair_state["activeEvents"] > 0 and crosshair_state["fractionalLogical"],
+              crosshair_state["customOverlayAbsent"] and crosshair_state["activeEvents"] > 0 and crosshair_state["pointMatchesFinger"],
               crosshair_state)
         pg.evaluate("() => window.__sendNativeTouchEnd()")
         pg.wait_for_timeout(80)
