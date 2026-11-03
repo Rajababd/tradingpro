@@ -323,7 +323,7 @@ class Cr {
       }
       // If a stable seriesId cannot be resolved, preserve the drawing unattached.
     }
-    s.addEventListener("pointerdown", this.handleMouseDown), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp);
+    s.addEventListener("pointerdown", this.handleMouseDown, true), s.addEventListener("pointermove", this.handleMouseMove), s.addEventListener("pointerup", this.handleMouseUp), s.addEventListener("pointercancel", this.handleMouseUp);
   }
   /**
    * Detach manager from chart
@@ -332,7 +332,7 @@ class Cr {
     if (this._isAttached) {
       for (const i of this._drawings.values())
         i.detach();
-      this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
+      this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown, true), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp), this._container.removeEventListener("pointercancel", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
     }
   }
   /**
@@ -482,6 +482,10 @@ class Cr {
         const e = this._drawings.get(this._selectedId);
         if (e && !e.options.locked) {
           this._isDragging = !0, this._dragAnchorIndex = s, e.setState("editing");
+          // Anchor editing owns this pointer sequence. Stop it in capture phase,
+          // before Lightweight Charts can start horizontal pan/scroll on its canvas.
+          i.preventDefault();
+          i.stopPropagation();
           return;
         }
       }
