@@ -31,7 +31,7 @@ vi.mock('lightweight-charts', () => ({
   CandlestickSeries: { type: 'Candlestick' },
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
-  TrackingModeExitMode: { OnNextTap: 0, OnTouchEnd: 1 },
+  TrackingModeExitMode: { OnTouchEnd: 0, OnNextTap: 1 },
 }));
 
 import { ChartController, PRICE_PANE_INDEX } from '../src/chart/ChartController';
@@ -68,7 +68,7 @@ describe('ChartController', () => {
     };
     expect(options.autoSize).toBe(true);
     expect(options.crosshair.mode).toBe(0); // CrosshairMode.Normal
-    expect(options.trackingMode.exitMode).toBe(0); // TrackingModeExitMode.OnNextTap
+    expect(options.trackingMode.exitMode).toBe(1); // TrackingModeExitMode.OnNextTap
   });
 
   it('mounting the same container twice does not create a second chart', () => {
