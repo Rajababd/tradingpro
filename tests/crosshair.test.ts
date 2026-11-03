@@ -27,9 +27,9 @@ describe('CrosshairController', () => {
   it('maps an OHLC bar under the crosshair to a snapshot', () => {
     const { chart, received, listen } = setup();
     listen();
-    chart.emitCrosshair({ time: 1704931200, logical: 10, paneIndex: 1, seriesData: new Map([[PRICE, bar]]) });
+    chart.emitCrosshair({ time: 1704931200, logical: 10, paneIndex: 1, point: { x: 23.5, y: 42.25 }, seriesData: new Map([[PRICE, bar]]) });
     expect(received).toEqual([
-      { time: 1704931200, logical: 10, paneIndex: 1, candle: { open: 100, high: 105, low: 99, close: 102 } },
+      { time: 1704931200, logical: 10, paneIndex: 1, point: { x: 23.5, y: 42.25 }, candle: { open: 100, high: 105, low: 99, close: 102 } },
     ]);
   });
 
@@ -55,7 +55,7 @@ describe('CrosshairController', () => {
     const { chart, received, listen } = setup();
     listen();
     chart.emitCrosshair({ seriesData: new Map() });
-    expect(received).toEqual([{ time: null, logical: null, paneIndex: null, candle: null }]);
+    expect(received).toEqual([{ time: null, logical: null, paneIndex: null, point: null, candle: null }]);
   });
 
   it('ignores non-numeric (string / business-day) times', () => {
