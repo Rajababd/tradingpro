@@ -4,14 +4,12 @@ import type { DrawingController } from '../chart/DrawingController';
 const TOOL_LABELS: Record<string, string> = {
   'trend-line': 'Trend line',
   'horizontal-line': 'Horizontal line',
-  rectangle: 'Rectangle',
   'fib-retracement': 'Fib retracement',
 };
 
 const TOOL_GLYPHS: Record<string, string> = {
   'trend-line': '／',
   'horizontal-line': '━',
-  rectangle: '▭',
   'fib-retracement': '⌁',
 };
 
