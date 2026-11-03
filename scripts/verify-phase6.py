@@ -386,6 +386,15 @@ with sync_playwright() as p:
           window.__sendNativeTouchEnd = () => target.dispatchEvent(new TouchEvent('touchend', {
             bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [makeTouch(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y)]
           }));
+          window.__sendNativeTouchTap = () => {
+            const tap = makeTouch(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y);
+            target.dispatchEvent(new TouchEvent('touchstart', {
+              bubbles: true, cancelable: true, touches: [tap], targetTouches: [tap], changedTouches: [tap]
+            }));
+            target.dispatchEvent(new TouchEvent('touchend', {
+              bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [tap]
+            }));
+          };
         }""", {"x": touch_x, "y": touch_y})
         pg.wait_for_timeout(650)  # native long-press threshold
         pg.evaluate("() => window.__sendNativeTouchMove(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y)")
@@ -406,8 +415,12 @@ with sync_playwright() as p:
               crosshair_state)
         pg.evaluate("() => window.__sendNativeTouchEnd()")
         pg.wait_for_timeout(80)
+        retained = e2("() => window.__touchCrosshairMoves.at(-1)?.logical !== null")
+        check(f"M15 {name}: native crosshair remains active after the finger is lifted", retained)
+        pg.evaluate("() => window.__sendNativeTouchTap()")
+        pg.wait_for_timeout(80)
         cleared = e2("() => window.__touchCrosshairMoves.at(-1)?.logical === null")
-        check(f"M15 {name}: native crosshair clears when the finger is lifted", cleared)
+        check(f"M15 {name}: native crosshair exits only after the next chart tap", cleared)
         pg.evaluate("() => window.__touchCrosshairUnsubscribe?.()")
         for menu_name, mid in [("Indicators", "menu-indicators"), ("SMA", "menu-sma")]:
             tr = pg.get_by_role("button", name=menu_name).first
