@@ -10,6 +10,7 @@ vi.mock('lightweight-charts', () => ({
   CandlestickSeries: { type: 'Candlestick' },
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
+  TrackingModeExitMode: { OnTouchEnd: 0 },
 }));
 
 import { ChartController } from '../src/chart/ChartController';
