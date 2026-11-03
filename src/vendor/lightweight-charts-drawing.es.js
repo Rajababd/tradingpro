@@ -578,7 +578,7 @@ class Cr {
     // Use the live left price-scale width instead of assuming a fixed 80px scale.
     let leftScaleWidth = 0;
     try {
-      leftScaleWidth = this._chart?.priceScale("left")?.width?.() ?? 0;
+      leftScaleWidth = this._chart?.priceScale("left", series?.getPane?.().paneIndex?.())?.width?.() ?? 0;
     } catch {
       leftScaleWidth = 0;
     }
