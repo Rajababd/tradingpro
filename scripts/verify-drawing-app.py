@@ -107,6 +107,14 @@ with sync_playwright() as p:
         if drawings:
             check(f"{mode}: drawing has two anchors", len(drawings[0].get("anchors", [])) == 2, str(drawings[0]))
             check(f"{mode}: drawing is attached to price series", drawings[0].get("seriesId") == "price", str(drawings[0].get("seriesId")))
+            persisted = page.evaluate("""() => {
+              const raw = localStorage.getItem('tradingpro:drawings:DWX:1D');
+              return raw ? JSON.parse(raw) : null;
+            }""")
+            saved_line = next((item for item in (persisted or {}).get("drawings", []) if item.get("id") == drawings[0]["id"]), None)
+            check(f"{mode}: trend line is synchronously saved with its registered type",
+                  saved_line is not None and saved_line.get("type") == "trend-line",
+                  str(saved_line))
         if drawing_committed:
             check(f"{mode}: tool exits after completion", button.get_attribute("aria-pressed") == "false")
 
@@ -204,8 +212,11 @@ with sync_playwright() as p:
         check(f"{mode}: single-anchor tool commits on one click/tap", horizontal_committed and len(drawings) == (2 if drawing_committed else 1))
         if horizontal_committed and drawings:
             check(f"{mode}: single-anchor drawing has one anchor", len(drawings[-1].get("anchors", [])) == 1)
-        # Exercise the remaining two-anchor tools in the real UI as well.
-        for tool_name, tool_label in (("rectangle", "Rectangle"), ("fib-retracement", "Fib retracement")):
+        # Rectangle is intentionally no longer exposed; existing saved rectangles remain importable.
+        check(f"{mode}: Rectangle tool is absent from the drawing toolbar",
+              page.get_by_role("button", name="Rectangle").count() == 0)
+        # Exercise the remaining two-anchor tool in the real UI as well.
+        for tool_name, tool_label in (("fib-retracement", "Fib retracement"),):
             tool_button = page.get_by_role("button", name=tool_label)
             check(f"{mode}: {tool_label} tool is present", tool_button.count() == 1)
             if tool_button.count() != 1:
@@ -249,12 +260,50 @@ with sync_playwright() as p:
             if committed:
                 check(f"{mode}: {tool_label} exits after completion",
                       tool_button.get_attribute("aria-pressed") == "false")
+        # Place drawings on RSI as well as the price pane. The same active tool must
+        # resolve the pane under the touch/click and convert y to that pane's scale.
+        indicators_button = page.get_by_role("button", name="Indicators")
+        indicators_button.click()
+        page.locator("#menu-indicators [data-indicator='rsi'] .switch-row").click()
+        page.wait_for_function("window.__tradingpro.chart.series.has('rsi:rsi')", timeout=4000)
+        rsi_rect = page.evaluate("""() => {
+          const pane = window.__tradingpro.chart.series.get('rsi:rsi').getPane();
+          const r = pane.getHTMLElement().getBoundingClientRect();
+          return {left:r.left, top:r.top, width:r.width, height:r.height};
+        }""")
+        page.keyboard.press("Escape")
+        rsi_p1 = (rsi_rect["left"] + rsi_rect["width"] * 0.42, rsi_rect["top"] + rsi_rect["height"] * 0.35)
+        rsi_p2 = (rsi_rect["left"] + rsi_rect["width"] * 0.67, rsi_rect["top"] + rsi_rect["height"] * 0.65)
+        button.click()
+        if mode == "desktop":
+            page.mouse.click(*rsi_p1); page.mouse.click(*rsi_p2)
+        else:
+            page.touchscreen.tap(*rsi_p1); page.touchscreen.tap(*rsi_p2)
+        page.wait_for_timeout(200)
+        rsi_line = next((item for item in export_drawings() if item.get("seriesId") == "rsi:rsi"), None)
+        check(f"{mode}: trend line can be created inside the RSI pane",
+              rsi_line is not None and len(rsi_line.get("anchors", [])) == 2, str(rsi_line))
+        # Horizontal line uses the same pane routing and must use RSI's own price scale.
+        horizontal.click()
+        rsi_h = (rsi_rect["left"] + rsi_rect["width"] * 0.56, rsi_rect["top"] + rsi_rect["height"] * 0.5)
+        if mode == "desktop": page.mouse.click(*rsi_h)
+        else: page.touchscreen.tap(*rsi_h)
+        page.wait_for_timeout(150)
+        rsi_horizontal = next((item for item in export_drawings() if item.get("type") == "horizontal-line" and item.get("seriesId") == "rsi:rsi"), None)
+        check(f"{mode}: horizontal line can be created inside the RSI pane",
+              rsi_horizontal is not None and len(rsi_horizontal.get("anchors", [])) == 1, str(rsi_horizontal))
+
         # Verify the autosaved drawings survive a full page reload.
         expected_drawings = export_drawings()
         page.wait_for_timeout(350)  # debounce window is 150 ms
         page.reload()
         page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
+        # RSI drawings are restored as pending until the RSI pane/series is materialized.
+        page.get_by_role("button", name="Indicators").click()
+        page.locator("#menu-indicators [data-indicator='rsi'] .switch-row").click()
+        page.wait_for_function("window.__tradingpro.chart.series.has('rsi:rsi')", timeout=4000)
+        page.keyboard.press("Escape")
         try:
             page.wait_for_function(
                 "expected => window.__tradingpro.chart.drawings.export().length === expected",
