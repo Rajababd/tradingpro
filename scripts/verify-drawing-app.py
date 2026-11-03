@@ -118,19 +118,13 @@ with sync_playwright() as p:
                 "drawing:selected", (event) => { window.__drawingSelectedId = event.drawingId; }
               );
             }""")
-            anchor_setup = page.evaluate("""() => {
+            anchor_setup = page.evaluate("""({x, y}) => {
               const drawing = window.__tradingpro.chart.drawings.export()[0];
-              const chart = window.__tradingpro.chart;
-              const series = chart.series.get("price");
-              const anchor = drawing.anchors[0];
-              const x = chart.viewport.chart.timeScale().logicalToCoordinate(anchor.logical);
-              const y = series.priceToCoordinate(anchor.price);
-              const range = chart.viewport.getLogicalRange();
-              const root = document.querySelector('[data-testid="chart"]');
-              const rect = root.getBoundingClientRect();
-              return { id: drawing.id, x: rect.left + x, y: rect.top + y,
-                       range, width: rect.width, height: rect.height };
-            }""")
+              return {
+                id: drawing.id, x, y,
+                range: window.__tradingpro.chart.viewport.getLogicalRange()
+              };
+            }""", {"x": p1[0], "y": p1[1]})
             # A click on the anchor selects the drawing. The following pointer sequence edits it.
             def dispatch_pointer(kind, x, y, pointer_type):
                 page.evaluate("""({kind, x, y, pointerType}) => {
