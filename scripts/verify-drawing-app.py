@@ -110,6 +110,80 @@ with sync_playwright() as p:
         if drawing_committed:
             check(f"{mode}: tool exits after completion", button.get_attribute("aria-pressed") == "false")
 
+            # Select the trend line, then drag its first anchor. The drawing manager must
+            # intercept the anchor pointerdown in capture phase before the chart can pan.
+            page.evaluate("""() => {
+              window.__drawingSelectedId = null;
+              window.__drawingSelectUnsubscribe = window.__tradingpro.chart.drawings.on(
+                "drawing:selected", (event) => { window.__drawingSelectedId = event.drawingId; }
+              );
+            }""")
+            anchor_setup = page.evaluate("""() => {
+              const drawing = window.__tradingpro.chart.drawings.export()[0];
+              const chart = window.__tradingpro.chart;
+              const series = chart.series.get("price");
+              const anchor = drawing.anchors[0];
+              const x = chart.viewport.chart.timeScale().logicalToCoordinate(anchor.logical);
+              const y = series.priceToCoordinate(anchor.price);
+              const range = chart.viewport.getLogicalRange();
+              const root = document.querySelector('[data-testid="chart"]');
+              const rect = root.getBoundingClientRect();
+              return { id: drawing.id, x: rect.left + x, y: rect.top + y,
+                       range, width: rect.width, height: rect.height };
+            }""")
+            # A click on the anchor selects the drawing. The following pointer sequence edits it.
+            def dispatch_pointer(kind, x, y, pointer_type):
+                page.evaluate("""({kind, x, y, pointerType}) => {
+                  const target = document.elementFromPoint(x, y);
+                  target.dispatchEvent(new PointerEvent(kind, {
+                    bubbles: true, cancelable: true, pointerId: 91, pointerType,
+                    isPrimary: true, button: 0, buttons: kind === 'pointerup' ? 0 : 1,
+                    clientX: x, clientY: y
+                  }));
+                }""", {"kind": kind, "x": x, "y": y, "pointerType": "touch" if mode == "phone" else "mouse"})
+            dispatch_pointer("pointerdown", anchor_setup["x"], anchor_setup["y"], "touch" if mode == "phone" else "mouse")
+            dispatch_pointer("pointerup", anchor_setup["x"], anchor_setup["y"], "touch" if mode == "phone" else "mouse")
+            page.wait_for_timeout(100)
+            selected = page.evaluate("window.__drawingSelectedId")
+            check(f"{mode}: tapping a drawing anchor selects its drawing", selected == anchor_setup["id"], selected)
+            page.evaluate("""() => {
+              const root = document.querySelector('[data-testid="chart"]');
+              root.addEventListener('pointerdown', (event) => {
+                window.__anchorPointerPrevented = event.defaultPrevented;
+              }, true);
+              window.__anchorPointerPrevented = false;
+            }""")
+            start = (anchor_setup["x"], anchor_setup["y"])
+            finish = (anchor_setup["x"] + 35, anchor_setup["y"] + 12)
+            dispatch_pointer("pointerdown", *start, "touch" if mode == "phone" else "mouse")
+            dispatch_pointer("pointermove", *finish, "touch" if mode == "phone" else "mouse")
+            dispatch_pointer("pointerup", *finish, "touch" if mode == "phone" else "mouse")
+            page.wait_for_timeout(150)
+            anchor_result = page.evaluate("""(id) => {
+              const chart = window.__tradingpro.chart;
+              const drawing = chart.drawings.export().find((item) => item.id === id);
+              return {
+                anchor: drawing?.anchors[0],
+                range: chart.viewport.getLogicalRange(),
+                prevented: window.__anchorPointerPrevented
+              };
+            }""", anchor_setup["id"])
+            old_anchor = drawings[0]["anchors"][0]
+            anchor_moved = anchor_result["anchor"] and (
+                abs(float(anchor_result["anchor"].get("logical", 0)) - float(old_anchor.get("logical", 0))) > 0.1 or
+                abs(float(anchor_result["anchor"]["price"]) - float(old_anchor["price"])) > 0.01
+            )
+            range_stable = anchor_result["range"] and all(
+                abs(anchor_result["range"][key] - anchor_setup["range"][key]) < 1e-6
+                for key in ("from", "to")
+            )
+            check(f"{mode}: dragging an anchor is captured before chart gesture handling",
+                  anchor_result["prevented"], str(anchor_result))
+            check(f"{mode}: dragging an anchor moves the anchor itself", bool(anchor_moved), str(anchor_result["anchor"]))
+            check(f"{mode}: dragging an anchor does not pan the chart", bool(range_stable),
+                  (anchor_setup["range"], anchor_result["range"]))
+            page.evaluate("() => window.__drawingSelectUnsubscribe?.()")
+
         # Continue with a one-click tool even if the two-click tool failed; this distinguishes
         # a general click-dispatch problem from an anchor-count/second-click problem.
         horizontal = page.get_by_role("button", name="Horizontal line")
