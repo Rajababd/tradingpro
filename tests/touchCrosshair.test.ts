@@ -17,8 +17,9 @@ describe('TouchCrosshairController', () => {
 
   const setup = () => {
     const series = { coordinateToPrice: vi.fn((y: number) => 200 - y) };
+    const timeScale = { coordinateToTime: vi.fn((x: number) => Math.round(x / 10)) };
     const chart = {
-      timeScale: () => ({ coordinateToTime: vi.fn((x: number) => Math.round(x / 10)) }),
+      timeScale: () => timeScale,
       setCrosshairPosition: vi.fn(),
       clearCrosshairPosition: vi.fn(),
     };
@@ -28,14 +29,14 @@ describe('TouchCrosshairController', () => {
       left: 10, top: 20, width: 400, height: 300, right: 410, bottom: 320, x: 10, y: 20, toJSON: () => ({}),
     }) });
     controller = new TouchCrosshairController(chart as never, series as never, container);
-    return { chart, series, container };
+    return { chart, series, timeScale, container };
   };
 
   it('uses Lightweight Charts native crosshair API at the touch-derived price and time', () => {
-    const { chart, series, container } = setup();
+    const { chart, series, timeScale, container } = setup();
     container.dispatchEvent(pointer('pointerdown', 'touch', 1, 111, 142));
     expect(series.coordinateToPrice).toHaveBeenCalledWith(122);
-    expect(chart.timeScale().coordinateToTime).toHaveBeenCalledWith(101);
+    expect(timeScale.coordinateToTime).toHaveBeenCalledWith(101);
     expect(chart.setCrosshairPosition).toHaveBeenCalledWith(78, 10, series);
     expect(container.querySelector('.touch-crosshair')).toBeNull();
   });
