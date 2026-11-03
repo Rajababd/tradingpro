@@ -371,6 +371,7 @@ with sync_playwright() as p:
             identifier: 77, target, clientX: px, clientY: py, pageX: px, pageY: py,
             screenX: px, screenY: py, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
           });
+          window.__touchCrosshairExpected = { x: x + 19, y: y + 23 };
           const start = makeTouch(x, y);
           target.dispatchEvent(new TouchEvent('touchstart', {
             bubbles: true, cancelable: true, touches: [start], targetTouches: [start], changedTouches: [start]
@@ -382,11 +383,11 @@ with sync_playwright() as p:
             }));
           };
           window.__sendNativeTouchEnd = () => target.dispatchEvent(new TouchEvent('touchend', {
-            bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [makeTouch(x + 19, y + 23)]
+            bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [makeTouch(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y)]
           }));
         }""", {"x": touch_x, "y": touch_y})
         pg.wait_for_timeout(650)  # native long-press threshold
-        pg.evaluate("() => window.__sendNativeTouchMove(window.__touchCrosshairExpectedX ?? 156, 196)")
+        pg.evaluate("() => window.__sendNativeTouchMove(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y)")
         pg.wait_for_timeout(100)
         crosshair_state = e2("""(() => {
           const moves = window.__touchCrosshairMoves;
