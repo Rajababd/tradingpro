@@ -14,7 +14,7 @@ import { DrawingController } from './DrawingController';
 import { PRICE_PANE_ID, PaneManager } from './PaneManager';
 import { PRICE_SERIES_ID, SeriesManager, type SeriesReader } from './SeriesManager';
 import { UserGestureTracker } from './UserGestureTracker';
-import { TouchCrosshairOverlay } from './TouchCrosshairOverlay';
+import { TouchCrosshairController } from './TouchCrosshairController';
 import { ViewportController } from './ViewportController';
 import { VisibilityController } from './VisibilityController';
 import { VisibilityModel } from './VisibilityModel';
@@ -52,7 +52,7 @@ export class ChartController {
   #crosshair: CrosshairController | null = null;
   #drawings: DrawingController | null = null;
   #gestures: UserGestureTracker | null = null;
-  #touchCrosshair: TouchCrosshairOverlay | null = null;
+  #touchCrosshair: TouchCrosshairController | null = null;
   #priceScaleRangeHandler: (() => void) | null = null;
   #priceScaleWidth = 64;
   #priceCandles: Candle[] = [];
@@ -167,7 +167,7 @@ export class ChartController {
       crosshair: { mode: CrosshairMode.Normal },
     });
 
-    let touchCrosshair: TouchCrosshairOverlay | null = null;
+    let touchCrosshair: TouchCrosshairController | null = null;
     try {
       const panes = new PaneManager();
       const series = new SeriesManager(chart, panes, new Set([PRICE_SERIES_ID]));
@@ -201,7 +201,7 @@ export class ChartController {
       }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
-      touchCrosshair = new TouchCrosshairOverlay(chart, container);
+      touchCrosshair = new TouchCrosshairController(chart, visibility.series.require<'Candlestick'>(PRICE_SERIES_ID), container);
     } catch (error) {
       touchCrosshair?.dispose();
       chart.remove(); // never leave a half-built chart behind
