@@ -266,6 +266,10 @@ with sync_playwright() as p:
         indicators_button.click()
         page.locator("#menu-indicators [data-indicator='rsi'] .switch-row").click()
         page.wait_for_function("window.__tradingpro.chart.series.has('rsi:rsi')", timeout=4000)
+        page.wait_for_function("""() => {
+          const pane = window.__tradingpro.chart.series.get('rsi:rsi').getPane();
+          return pane.getHTMLElement() !== null;
+        }""", timeout=4000)
         rsi_rect = page.evaluate("""() => {
           const pane = window.__tradingpro.chart.series.get('rsi:rsi').getPane();
           const r = pane.getHTMLElement().getBoundingClientRect();
