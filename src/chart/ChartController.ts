@@ -201,7 +201,7 @@ export class ChartController {
       }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
-      touchCrosshair = new TouchCrosshairController(chart, visibility.series.require<'Candlestick'>(PRICE_SERIES_ID), container);
+      touchCrosshair = new TouchCrosshairController(chart, series.require<'Candlestick'>(PRICE_SERIES_ID), container);
     } catch (error) {
       touchCrosshair?.dispose();
       chart.remove(); // never leave a half-built chart behind
