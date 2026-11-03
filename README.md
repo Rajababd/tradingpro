@@ -4,6 +4,13 @@ Mobile-first financial charting app (TypeScript, React, Vite, Lightweight Charts
 Status: **Phase 6 (SMA system and top bar)**. The Indicators and SMA dropdowns work end to end: RSI, Volume, OBV, Accumulation/Distribution and MACD, and an SMA on price or on any indicator output, shown in their own panes, with visibility and settings controls. Settings are **not saved across reloads yet** (Phase 8). The app shows a validated, labelled-simulated candlestick chart with live incremental updates, paging through older history, failure recovery, series/pane managers, viewport and crosshair inspection. Indicator conventions and the display rules are in `docs/indicators.md`.
 See `docs/architecture.md` for design decisions and the data-validation policy.
 
+## Recent drawing work and acceptance status
+- The recent drawing placement and logical/time-coordinate fixes are documented in `docs/drawing-library-patch.md`.
+- Browser-level drawing test scope and its limitations are recorded in `docs/drawing-browser-verification.md`.
+- The Phase 6/drawing acceptance matrix, including what passed in CI versus what remains unverified or deferred, is in `docs/phase6-completion-audit.md`.
+- The reusable project handoff prompt for AI-assisted continuation is in `docs/AI_HANDOFF_PROMPT.md`.
+- Latest post-PR-#2 CI results reported 383 passing tests across 28 test files, plus type-check, production build, drawing regression checks, and desktop/phone Chromium drawing smoke tests. The separate `scripts/verify-phase6.py` suite is not run by the current CI workflow and must be executed explicitly to re-verify Phase 6 browser behavior on a given revision.
+
 ## Requirements
 Node 22+ and npm 10+.
 

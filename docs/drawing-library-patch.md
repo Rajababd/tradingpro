@@ -1,44 +1,51 @@
-# Drawing library logic patch (isolated, not yet wired into the app)
+# Drawing library and application integration notes
 
-The patched vendor bundle lives at `src/vendor/lightweight-charts-drawing.es.js`. The original uploaded bundle is not overwritten.
+The patched vendor bundle is `src/vendor/lightweight-charts-drawing.es.js`. This document records the current implementation and verification boundaries; it supersedes older statements in this file that described the patch as unwired or unverified.
 
-## Fixes
+## Stable series identity and restoration
 
-1. **Stable series identity on reattach** — `DrawingManager.attach` accepts an optional fifth callback `(seriesId) => series`. After `detach()`, drawings can be rebound by their preserved `seriesId` rather than depending on the cleared series object.
-2. **No wrong-series fallback** — `importDrawings` only uses `paneIndex` for legacy drawings that have no `seriesId`. If a drawing has a stable ID that cannot be resolved, it is retained unattached. The ID is preserved in subsequent exports.
-3. **Pending drawings can be restored later** — `addDrawing` now allows an unresolved drawing to be stored without trying to resolve `undefined` as a series; the next `attach` can bind it when its series becomes available.
-4. **Pane index survives detach** — detaching no longer resets the last known pane index to zero, preserving useful serialization metadata for pending drawings.
-5. **Dynamic left-scale offset** — pointer x coordinates use the current left price-scale width instead of a hard-coded 80 pixels. If the chart API does not expose it, the code safely falls back to zero.
+1. `DrawingManager.attach` accepts an optional fifth callback `(seriesId) => series`. After detach, drawings can rebind using their preserved `seriesId`.
+2. `importDrawings` uses `paneIndex` as a legacy fallback only when a drawing has no `seriesId`. If a stable ID cannot be resolved, the drawing is retained unattached instead of being attached to a different series.
+3. Unresolved drawings can be stored and rebound when the target series becomes available.
+4. Detach preserves the last known pane index as serialization metadata.
+5. Pointer x coordinates use the current left price-scale width instead of a hard-coded 80-pixel offset, with a safe fallback when the API does not expose the width.
 
-## Compatibility and API notes
+Compatibility:
+- The fourth `attach` callback remains the `series => seriesId` resolver.
+- The optional fifth callback is `seriesId => series`.
+- `importDrawings(items, factory, paneResolver, seriesResolver)` retains its parameter order.
 
-- The original fourth `attach` callback remains the `series => seriesId` resolver. The new optional fifth argument is `seriesId => series`.
-- `importDrawings(items, factory, paneResolver, seriesResolver)` keeps its existing parameter order.
-- This is a logic patch only. It has **not** yet been verified in a real browser with Lightweight Charts 5.2.1, and the vendor bundle is not yet wired into `ChartController` or React UI.
+## Chart-layer integration
 
-## Regression checks
+- `ChartController` owns a `DrawingController` exposed as `chart.drawings`.
+- The controller provides create/remove/clear/import/export operations and connects the manager to the chart/container.
+- Drawings resolve their target through stable `seriesId` values.
+- Series lifecycle notifications detach drawings before their target series is removed and retry attachment when a matching series is added again.
+- The React drawing toolbar exposes Trend Line, Horizontal Line, Rectangle, Fibonacci Retracement, Cancel, and Clear drawings.
 
-Run:
+## Placement and coordinates
 
-```sh
-npm run test:drawing
-```
+- Placement uses a container `pointerup` handler rather than Lightweight Charts `subscribeClick`, with guards for primary-button input, chart/container/series presence, chart bounds, time-scale width, price-pane height, valid time/logical conversion, and finite price.
+- One-anchor tools complete on one click/tap; two-anchor tools wait for the second click/tap.
+- Newly placed anchors store both timestamp and logical bar index.
+- Rendering prefers logical coordinates where available and retains timestamp fallback for legacy drawings.
+- When older candles are prepended, logical anchors are shifted to keep drawings aligned with the same candles.
+- Bar-span measurement uses logical-index distance where available; day-span measurement remains timestamp-based.
+- Drag/edit paths preserve both logical and timestamp coordinates.
 
-The regression script checks detach/reattach by stable ID, unresolved drawing retention, prevention of pane fallback for known IDs, late restoration, and dynamic left-scale coordinate offset using fake chart/series objects.
+## Regression coverage
 
-## Phase 2: chart-layer integration
+`npm run test:drawing` exercises drawing-manager lifecycle and stable series identity, unresolved/pending restoration, protection against wrong-series fallback, dynamic scale offsets, interactive one-/two-anchor placement, logical-coordinate precedence, legacy fallback, serialization round-trip, prepend shifting and measurement behavior.
 
-`ChartController` now owns a `DrawingController` and exposes it through `chart.drawings`. The controller attaches the drawing manager to the chart/container, resolves drawings by stable `seriesId`, and exposes create/remove/clear/import/export operations. `SeriesManager` emits lifecycle notifications: drawings detach before their target series is removed and unresolved drawings retry attachment when a series is added again. This keeps the saved drawing record alive while its series is temporarily absent.
+The CI workflow additionally runs the full project tests, TypeScript type-check, production build, and `scripts/verify-drawing-app.py` in desktop and phone-sized Chromium contexts.
 
-This integration is an API foundation, not yet a complete drawing toolbar or persistence UI. The vendor package's active-tool method alone does not implement the full pointer-to-anchor creation flow, so the next UI step must verify the library's creation handlers before presenting tools as functional.
+## Explicit limitations
 
-## Interactive placement and initial toolbar
+- Indicator-pane-aware placement is not implemented; current placement targets the price series.
+- There is no live preview before completing a multi-anchor drawing.
+- The toolbar exposes Clear drawings, but no dedicated individual-delete control is exposed in the toolbar.
+- Although manager APIs exist for selection/hit-testing and import/export, the current browser smoke test does not establish complete selection/editing/deletion UX.
+- Export/import APIs exist, but persistence to durable storage and restoring drawings after a page reload are not established by the current app integration.
+- Rectangle and Fibonacci Retracement are listed in the toolbar, but end-to-end browser acceptance for these specific tools remains outstanding.
 
-The manager now handles click-to-place drawing tools: it collects the number of anchors declared by the selected tool, converts chart-click coordinates through the primary (price) series, creates the drawing, and exits tool mode. Unknown tools and clicks without a valid time/price are ignored safely. The `DrawingController` exposes `setActiveTool()` and a small event subscription surface; the first React toolbar exposes Trend line, Horizontal line, Rectangle, Fibonacci Retracement, Cancel, and Clear drawings.
-
-Scope and verification limits:
-
-- Placement currently targets the permanent price series only. Pane-aware placement for indicators is intentionally not claimed.
-- Multi-anchor drawings are placed by successive clicks; there is not yet a live preview while moving the pointer.
-- The drawing-specific Node regression harness covers one-anchor and two-anchor placement using a fake chart. A browser run against Lightweight Charts 5.2.1 is still required before treating this as production-ready.
-- Dependency installation timed out in this environment, so TypeScript/build verification could not be completed here.
+These limitations are not automatically Phase 6 blockers: the README defines the original Phase 6 as the SMA system and top bar and describes drawings/persistence as later-phase work. Decide their status against the agreed product acceptance criteria rather than silently expanding Phase 6 scope.
