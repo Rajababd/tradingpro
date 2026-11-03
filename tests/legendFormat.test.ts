@@ -28,7 +28,7 @@ describe('formatLegend', () => {
   });
 
   it('uses UTC, not local time, at a day boundary', () => {
-    const s: CrosshairSnapshot = { time: t(1704067199), logical: 0, paneIndex: 0, candle: null }; // 2023-12-31T23:59:59Z
+    const s: CrosshairSnapshot = { time: t(1704067199), logical: 0, paneIndex: 0, point: null, candle: null }; // 2023-12-31T23:59:59Z
     expect(formatLegend(s)).toBe('2023-12-31');
   });
 });
