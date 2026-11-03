@@ -65,6 +65,9 @@ export class DrawingController {
       container,
       (api) => this.#idForSeries(api),
       (id) => this.series.get<SeriesType>(id),
+      (paneIndex) => this.series.list()
+        .map(({ id }) => this.series.get<SeriesType>(id))
+        .find((api) => api?.getPane().paneIndex() === paneIndex),
     );
   }
 

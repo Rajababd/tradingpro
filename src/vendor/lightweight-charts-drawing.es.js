@@ -297,6 +297,7 @@ class Cr {
     p(this, "_isAttached", !1);
     p(this, "_seriesIdResolver", null);
     p(this, "_seriesResolverById", null);
+    p(this, "_seriesResolverForPane", null);
     // Interaction state
     p(this, "_activeTool", null);
     p(this, "_pendingAnchors", []);
@@ -308,8 +309,8 @@ class Cr {
   /**
    * Attach manager to a chart and series
    */
-  attach(i, t, s, e, n) {
-    this._isAttached && this.detach(), this._chart = i, this._series = t, this._container = s, this._seriesIdResolver = e ?? null, this._seriesResolverById = n ?? null, this._isAttached = !0;
+  attach(i, t, s, e, n, o) {
+    this._isAttached && this.detach(), this._chart = i, this._series = t, this._container = s, this._seriesIdResolver = e ?? null, this._seriesResolverById = n ?? null, this._seriesResolverForPane = o ?? null, this._isAttached = !0;
     for (const o of this._drawings.values()) {
       let r = o.getSeries();
       // A detached drawing loses its series object. Restore by stable seriesId first.
@@ -332,7 +333,7 @@ class Cr {
     if (this._isAttached) {
       for (const i of this._drawings.values())
         i.detach();
-      this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown, true), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp), this._container.removeEventListener("pointercancel", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._isAttached = !1;
+      this._container && (this._container.removeEventListener("pointerdown", this.handleMouseDown, true), this._container.removeEventListener("pointermove", this.handleMouseMove), this._container.removeEventListener("pointerup", this.handleMouseUp), this._container.removeEventListener("pointercancel", this.handleMouseUp)), this._chart = null, this._series = null, this._container = null, this._seriesResolverForPane = null, this._isAttached = !1;
     }
   }
   /**
@@ -475,7 +476,8 @@ class Cr {
   }
   // ============ Event Handling ============
   handleMouseDown(i) {
-    const t = this.getPointFromEvent(i);
+    const selected = this._selectedId ? this._drawings.get(this._selectedId) : null;
+    const t = selected ? this.getPointFromEvent(i, selected.getSeries()) : null;
     if (t && this._selectedId) {
       const s = this.hitTestAnchor(t);
       if (s !== null) {
@@ -495,7 +497,7 @@ class Cr {
     if (!this._isDragging || this._dragAnchorIndex === null || !this._selectedId) return;
     const t = this._drawings.get(this._selectedId);
     if (!t) return;
-    const s = this.getPointFromEvent(i);
+    const s = this.getPointFromEvent(i, t.getSeries());
     if (!s) return;
     const e = t.getViewport();
     if (!e) return;
@@ -515,16 +517,18 @@ class Cr {
       return;
     }
     if (!this._chart || !this._series || !this._container || (i.pointerType === "mouse" && i.button !== 0)) return;
-    const point = this.getPointFromEvent(i);
-    if (!point) return;
-    const timeScale = this._chart.timeScale();
-    const paneHeight = this._series.getPane().getHeight();
-    if (point.x < 0 || point.x > timeScale.width() || point.y < 0 || point.y > paneHeight) return;
 
     if (this._activeTool) {
+      const targetSeries = this.getSeriesAtEvent(i);
+      if (!targetSeries) return;
+      const point = this.getPointFromEvent(i, targetSeries);
+      if (!point) return;
+      const timeScale = this._chart.timeScale();
+      const paneHeight = targetSeries.getPane().getHeight();
+      if (point.x < 0 || point.x > timeScale.width() || point.y < 0 || point.y > paneHeight) return;
       const time = timeScale.coordinateToTime(point.x);
       const logical = timeScale.coordinateToLogical(point.x);
-      const price = this._series.coordinateToPrice(point.y);
+      const price = targetSeries.coordinateToPrice(point.y);
       if (time === null || time === void 0 || logical === null || !Number.isFinite(logical) || price === null || !Number.isFinite(price)) return;
       const definition = kr().get(this._activeTool);
       if (!definition) {
@@ -535,27 +539,55 @@ class Cr {
       if (this._pendingAnchors.length >= definition.requiredAnchors) {
         const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const drawing = kr().createDrawing(this._activeTool, id, [...this._pendingAnchors]);
-        if (drawing) this.addDrawing(drawing, this._series);
+        if (drawing) this.addDrawing(drawing, targetSeries);
         this.setActiveTool(null);
       }
       return;
     }
-    const drawing = this.hitTest(point);
+    const drawing = this.hitTestEvent(i);
     drawing ? this.selectDrawing(drawing.id) : this.deselectAll();
   }
-  getPointFromEvent(i) {
-    if (!this._container) return null;
-    const t = this._container.getBoundingClientRect();
-    // Use the live left price-scale width instead of assuming a fixed 80px scale.
-    let s = 0;
-    try {
-      s = this._chart?.priceScale("left")?.width?.() ?? 0;
-    } catch {
-      s = 0;
+  getSeriesAtEvent(i) {
+    if (!this._chart || !this._seriesResolverForPane) return this._series;
+    const panes = this._chart.panes?.() ?? [];
+    for (let index = 0; index < panes.length; index++) {
+      const series = this._seriesResolverForPane(index);
+      const element = panes[index]?.getHTMLElement?.() ?? series?.getPane?.().getHTMLElement?.();
+      if (!series || !element) continue;
+      const rect = element.getBoundingClientRect();
+      if (i.clientY >= rect.top && i.clientY <= rect.bottom) return series;
     }
+    return null;
+  }
+  hitTestEvent(i) {
+    const drawings = Array.from(this._drawings.values()).reverse();
+    for (const drawing of drawings) {
+      if (!drawing.options.visible) continue;
+      const series = drawing.getSeries();
+      if (!series) continue;
+      const point = this.getPointFromEvent(i, series);
+      if (!point || point.y < 0 || point.y > series.getPane().getHeight()) continue;
+      const viewport = drawing.getViewport();
+      if (viewport && drawing.testHit(point, viewport)) return drawing;
+    }
+    return null;
+  }
+  getPointFromEvent(i, series = this._series) {
+    if (!this._container) return null;
+    const containerRect = this._container.getBoundingClientRect();
+    // Use the live left price-scale width instead of assuming a fixed 80px scale.
+    let leftScaleWidth = 0;
+    try {
+      leftScaleWidth = this._chart?.priceScale("left", series?.getPane?.().paneIndex?.())?.width?.() ?? 0;
+    } catch {
+      leftScaleWidth = 0;
+    }
+    let paneTop = containerRect.top;
+    const paneElement = series?.getPane?.().getHTMLElement?.();
+    if (paneElement) paneTop = paneElement.getBoundingClientRect().top;
     return {
-      x: i.clientX - t.left - s,
-      y: i.clientY - t.top
+      x: i.clientX - containerRect.left - leftScaleWidth,
+      y: i.clientY - paneTop
     };
   }
   // ============ Viewport ============

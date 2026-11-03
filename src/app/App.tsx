@@ -56,6 +56,14 @@ export function App() {
     let persistenceReady = false;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
     const storageKey = drawingStorageKey(symbol, timeframe);
+    const persistDrawingsNow = () => {
+      if (cancelled || restoringDrawings || !persistenceReady) return;
+      if (saveTimer !== undefined) {
+        clearTimeout(saveTimer);
+        saveTimer = undefined;
+      }
+      try { saveDrawings(window.localStorage, storageKey, chart.drawings.export()); } catch { /* best-effort */ }
+    };
     const persistDrawings = () => {
       if (cancelled || restoringDrawings || !persistenceReady) return;
       if (saveTimer !== undefined) clearTimeout(saveTimer);
@@ -64,8 +72,15 @@ export function App() {
         try { saveDrawings(window.localStorage, storageKey, chart.drawings.export()); } catch { /* best-effort */ }
       }, 150);
     };
-    const drawingEvents = ['drawing:added', 'drawing:removed', 'drawing:cleared', 'drawing:updated', 'drawing:edit-finished'];
-    const unsubscribeDrawingEvents = drawingEvents.map((event) => chart.drawings.on(event, persistDrawings));
+    // Structural changes are written synchronously: closing the Android app immediately
+    // after placing a drawing must not lose it before a debounce timer fires.
+    const unsubscribeDrawingEvents = [
+      chart.drawings.on('drawing:added', persistDrawingsNow),
+      chart.drawings.on('drawing:removed', persistDrawingsNow),
+      chart.drawings.on('drawing:cleared', persistDrawingsNow),
+      chart.drawings.on('drawing:updated', persistDrawings),
+      chart.drawings.on('drawing:edit-finished', persistDrawingsNow),
+    ];
 
     const explicitRefresh = refreshRequest?.symbol === symbol && refreshRequest.timeframe === timeframe;
     const restoreSavedDrawings = () => {
