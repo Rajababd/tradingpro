@@ -371,7 +371,7 @@ with sync_playwright() as p:
             identifier: 77, target, clientX: px, clientY: py, pageX: px, pageY: py,
             screenX: px, screenY: py, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
           });
-          window.__touchCrosshairExpected = { x: x + 19, y: y + 23 };
+          window.__touchCrosshairExpected = { x: x + 17.3, y: y + 23.7 };
           const start = makeTouch(x, y);
           target.dispatchEvent(new TouchEvent('touchstart', {
             bubbles: true, cancelable: true, touches: [start], targetTouches: [start], changedTouches: [start]
@@ -396,6 +396,7 @@ with sync_playwright() as p:
             customOverlayAbsent: document.querySelector('[data-testid=chart] .touch-crosshair') === null,
             activeEvents: active.length,
             fractionalLogical: active.some((m) => Math.abs(m.logical - Math.round(m.logical)) > 0.02),
+            logicalValues: active.map((m) => m.logical),
             lastLogical: active.length ? active[active.length - 1].logical : null
           };
         })()""")
