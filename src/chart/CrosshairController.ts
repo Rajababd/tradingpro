@@ -10,6 +10,8 @@ export interface CrosshairSnapshot {
   readonly logical: number | null;
   /** Index of the pane the pointer is over (a chart index, valid only right now). */
   readonly paneIndex: number | null;
+  /** Exact pointer coordinates relative to the chart container, supplied by Lightweight Charts. */
+  readonly point: { readonly x: number; readonly y: number } | null;
   /** The price series' bar at `time`, whichever pane the pointer is in. */
   readonly candle: {
     readonly open: number;
@@ -33,6 +35,7 @@ const EMPTY: CrosshairSnapshot = Object.freeze({
   time: null,
   logical: null,
   paneIndex: null,
+  point: null,
   candle: null,
 });
 
@@ -73,6 +76,7 @@ export class CrosshairController {
       time: param.time as number as UnixSeconds,
       logical: param.logical as number,
       paneIndex: param.paneIndex ?? null,
+      point: param.point === undefined || param.point === null ? null : { x: param.point.x, y: param.point.y },
       candle: toCandleValues(bar),
     };
   }

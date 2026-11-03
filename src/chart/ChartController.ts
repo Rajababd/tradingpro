@@ -2,6 +2,7 @@ import {
   CandlestickSeries,
   ColorType,
   CrosshairMode,
+  TrackingModeExitMode,
   createChart,
   type CandlestickData,
   type IChartApi,
@@ -14,7 +15,6 @@ import { DrawingController } from './DrawingController';
 import { PRICE_PANE_ID, PaneManager } from './PaneManager';
 import { PRICE_SERIES_ID, SeriesManager, type SeriesReader } from './SeriesManager';
 import { UserGestureTracker } from './UserGestureTracker';
-import { TouchCrosshairOverlay } from './TouchCrosshairOverlay';
 import { ViewportController } from './ViewportController';
 import { VisibilityController } from './VisibilityController';
 import { VisibilityModel } from './VisibilityModel';
@@ -52,7 +52,6 @@ export class ChartController {
   #crosshair: CrosshairController | null = null;
   #drawings: DrawingController | null = null;
   #gestures: UserGestureTracker | null = null;
-  #touchCrosshair: TouchCrosshairOverlay | null = null;
   #priceScaleRangeHandler: (() => void) | null = null;
   #priceScaleWidth = 64;
   #priceCandles: Candle[] = [];
@@ -165,9 +164,9 @@ export class ChartController {
       rightPriceScale: { borderColor: t.rule },
       timeScale: { borderColor: t.rule },
       crosshair: { mode: CrosshairMode.Normal },
+      trackingMode: { exitMode: TrackingModeExitMode.OnTouchEnd },
     });
 
-    let touchCrosshair: TouchCrosshairOverlay | null = null;
     try {
       const panes = new PaneManager();
       const series = new SeriesManager(chart, panes, new Set([PRICE_SERIES_ID]));
@@ -201,15 +200,12 @@ export class ChartController {
       }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
-      touchCrosshair = new TouchCrosshairOverlay(chart, container);
     } catch (error) {
-      touchCrosshair?.dispose();
       chart.remove(); // never leave a half-built chart behind
       throw error;
     }
     this.#chart = chart;
     this.#container = container;
-    this.#touchCrosshair = touchCrosshair;
   }
 
   /**
@@ -267,8 +263,6 @@ export class ChartController {
     this.#priceScaleRangeHandler?.();
     this.#priceScaleRangeHandler = null;
     this.#drawings?.dispose();
-    this.#touchCrosshair?.dispose();
-    this.#touchCrosshair = null;
     this.#crosshair?.dispose();
     this.#viewport?.dispose();
     this.#gestures?.dispose();
