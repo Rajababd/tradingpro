@@ -164,7 +164,7 @@ export class ChartController {
       rightPriceScale: { borderColor: t.rule },
       timeScale: { borderColor: t.rule },
       crosshair: { mode: CrosshairMode.Normal },
-      trackingMode: { exitMode: TrackingModeExitMode.OnTouchEnd },
+      trackingMode: { exitMode: TrackingModeExitMode.OnNextTap },
     });
 
     try {
