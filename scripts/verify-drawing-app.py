@@ -110,6 +110,51 @@ with sync_playwright() as p:
         check(f"{mode}: single-anchor tool commits on one click/tap", horizontal_committed and len(drawings) == (2 if drawing_committed else 1))
         if horizontal_committed and drawings:
             check(f"{mode}: single-anchor drawing has one anchor", len(drawings[-1].get("anchors", [])) == 1)
+        # Exercise the remaining two-anchor tools in the real UI as well.
+        for tool_name, tool_label in (("rectangle", "Rectangle"), ("fib-retracement", "Fib retracement")):
+            tool_button = page.get_by_role("button", name=tool_label)
+            check(f"{mode}: {tool_label} tool is present", tool_button.count() == 1)
+            if tool_button.count() != 1:
+                continue
+            tool_button.click()
+            check(f"{mode}: {tool_label} tool activates", tool_button.get_attribute("aria-pressed") == "true")
+            before_count = len(export_drawings())
+            tool_p1 = (box["x"] + box["width"] * 0.34, box["y"] + box["height"] * 0.32)
+            tool_p2 = (box["x"] + box["width"] * 0.64, box["y"] + box["height"] * 0.66)
+            if mode == "desktop":
+                page.mouse.click(*tool_p1)
+                check(f"{mode}: {tool_label} waits for its second anchor",
+                      len(export_drawings()) == before_count, str(export_drawings()))
+                page.mouse.click(*tool_p2)
+            else:
+                page.touchscreen.tap(*tool_p1)
+                check(f"{mode}: {tool_label} waits for its second anchor",
+                      len(export_drawings()) == before_count, str(export_drawings()))
+                page.touchscreen.tap(*tool_p2)
+            committed = True
+            try:
+                page.wait_for_function(
+                    "expected => window.__tradingpro.chart.drawings.export().length === expected",
+                    arg=before_count + 1,
+                    timeout=4000,
+                )
+            except Exception:
+                committed = False
+                print(f"DEBUG {mode}: {tool_label} did not commit; drawings={export_drawings()}")
+                print(f"DEBUG {mode}: activeTool={page.evaluate('window.__tradingpro.chart.drawings.activeTool')}")
+                print(f"DEBUG {mode}: pageErrors={errors}")
+            current_drawings = export_drawings()
+            check(f"{mode}: {tool_label} commits after second click/tap",
+                  committed and len(current_drawings) == before_count + 1, str(current_drawings))
+            if len(current_drawings) > before_count:
+                created = current_drawings[-1]
+                check(f"{mode}: {tool_label} has two anchors",
+                      len(created.get("anchors", [])) == 2, str(created))
+                check(f"{mode}: {tool_label} is attached to price series",
+                      created.get("seriesId") == "price", str(created.get("seriesId")))
+            if committed:
+                check(f"{mode}: {tool_label} exits after completion",
+                      tool_button.get_attribute("aria-pressed") == "false")
         check(f"{mode}: no browser exceptions", not errors, repr(errors))
         context.close()
     browser.close()
