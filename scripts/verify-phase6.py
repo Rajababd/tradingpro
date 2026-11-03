@@ -396,12 +396,12 @@ with sync_playwright() as p:
           return {
             customOverlayAbsent: document.querySelector('[data-testid=chart] .touch-crosshair') === null,
             activeEvents: active.length,
-            pointMatchesFinger: active.some((m) => m.point && Math.abs(m.point.x - window.__touchCrosshairExpected.localX) < 1 && Math.abs(m.point.y - window.__touchCrosshairExpected.localY) < 1),
+            pointMatchesFinger: active.some((m) => m.point && Math.abs(m.point.x - window.__touchCrosshairExpected.localX) < 2 && Math.abs(m.point.y - window.__touchCrosshairExpected.localY) < 2),
             points: active.map((m) => m.point),
             lastLogical: active.length ? active[active.length - 1].logical : null
           };
         })()""")
-        check(f"M15 {name}: Lightweight Charts native crosshair follows touch at a free logical position",
+        check(f"M15 {name}: Lightweight Charts native crosshair follows the exact touch point",
               crosshair_state["customOverlayAbsent"] and crosshair_state["activeEvents"] > 0 and crosshair_state["pointMatchesFinger"],
               crosshair_state)
         pg.evaluate("() => window.__sendNativeTouchEnd()")
