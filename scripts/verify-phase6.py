@@ -80,8 +80,8 @@ with sync_playwright() as p:
     check("compact shell: second top row is exactly 40px", abs(shell["second"]["height"] - 40) <= 0.5, shell)
     check("compact shell: left drawing rail is narrow and sits beside the chart",
           38 <= shell["rail"]["width"] <= 44 and abs(shell["chart"]["x"] - shell["rail"]["right"]) <= 1, shell)
-    check("compact shell: drawing controls are square icon buttons",
-          len(shell["buttons"]) >= 5 and all(abs(b["w"] - b["h"]) <= 1 for b in shell["buttons"]), shell)
+    check("compact shell: four remaining drawing controls are square icon buttons",
+          len(shell["buttons"]) == 4 and all(abs(b["w"] - b["h"]) <= 1 for b in shell["buttons"]), shell)
     check("compact shell: both top menus are visible inside the second row",
           page.get_by_role("button", name="Indicators").is_visible() and page.get_by_role("button", name="SMA").is_visible(), shell)
     check("compact shell: symbol selector and refresh action are visible in the first row",
