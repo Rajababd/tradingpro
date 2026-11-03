@@ -360,30 +360,52 @@ with sync_playwright() as p:
         chart_box = pg.locator("[data-testid=chart]").bounding_box()
         touch_x = chart_box["x"] + 137
         touch_y = chart_box["y"] + 173
+        # Lightweight Charts owns the crosshair. Its mobile tracking mode is entered by a
+        # long press, follows the real touch coordinates in Normal mode, and exits on touchend.
         pg.evaluate("""({x,y}) => {
-          const target = document.querySelector('[data-testid=chart]');
-          const send = (type, px, py, buttons) => target.dispatchEvent(new PointerEvent(type, {
-            bubbles: true, pointerId: 77, pointerType: 'touch', clientX: px, clientY: py, buttons
+          const target = document.elementFromPoint(x, y);
+          const moves = [];
+          window.__touchCrosshairMoves = moves;
+          window.__touchCrosshairUnsubscribe = window.__tradingpro.chart.crosshair.subscribe((snapshot) => moves.push(snapshot));
+          const makeTouch = (px, py) => new Touch({
+            identifier: 77, target, clientX: px, clientY: py, pageX: px, pageY: py,
+            screenX: px, screenY: py, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
+          });
+          const start = makeTouch(x, y);
+          target.dispatchEvent(new TouchEvent('touchstart', {
+            bubbles: true, cancelable: true, touches: [start], targetTouches: [start], changedTouches: [start]
           }));
-          send('pointerdown', x, y, 1);
-          send('pointermove', x + 19, y + 23, 1);
-          window.__touchCrosshairExpected = { x: x + 19, y: y + 23 };
+          window.__sendNativeTouchMove = (px, py) => {
+            const next = makeTouch(px, py);
+            target.dispatchEvent(new TouchEvent('touchmove', {
+              bubbles: true, cancelable: true, touches: [next], targetTouches: [next], changedTouches: [next]
+            }));
+          };
+          window.__sendNativeTouchEnd = () => target.dispatchEvent(new TouchEvent('touchend', {
+            bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [makeTouch(x + 19, y + 23)]
+          }));
         }""", {"x": touch_x, "y": touch_y})
-        pg.wait_for_timeout(50)
-        crosshair_pos = e2("""(() => {
-          const chart = document.querySelector('[data-testid=chart]');
-          const layer = chart.querySelector('.touch-crosshair');
-          const v = layer.querySelector('.touch-crosshair__vertical');
-          const h = layer.querySelector('.touch-crosshair__horizontal');
-          const r = chart.getBoundingClientRect();
-          return { visible: layer.dataset.visible, left: parseFloat(v.style.left), top: parseFloat(h.style.top),
-            expectedX: window.__touchCrosshairExpected.x - r.left, expectedY: window.__touchCrosshairExpected.y - r.top };
+        pg.wait_for_timeout(650)  # native long-press threshold
+        pg.evaluate("() => window.__sendNativeTouchMove(window.__touchCrosshairExpectedX ?? 156, 196)")
+        pg.wait_for_timeout(100)
+        crosshair_state = e2("""(() => {
+          const moves = window.__touchCrosshairMoves;
+          const active = moves.filter((m) => m && m.logical !== null);
+          return {
+            customOverlayAbsent: document.querySelector('[data-testid=chart] .touch-crosshair') === null,
+            activeEvents: active.length,
+            fractionalLogical: active.some((m) => Math.abs(m.logical - Math.round(m.logical)) > 0.02),
+            lastLogical: active.length ? active[active.length - 1].logical : null
+          };
         })()""")
-        check(f"M15 {name}: touch crosshair follows the exact finger coordinates", crosshair_pos["visible"] == "true" and abs(crosshair_pos["left"] - crosshair_pos["expectedX"]) < 1 and abs(crosshair_pos["top"] - crosshair_pos["expectedY"]) < 1, crosshair_pos)
-        pg.evaluate("""() => document.querySelector('[data-testid=chart]').dispatchEvent(new PointerEvent('pointerup', {
-          bubbles: true, pointerId: 77, pointerType: 'touch', clientX: window.__touchCrosshairExpected.x,
-          clientY: window.__touchCrosshairExpected.y, buttons: 0
-        }))""")
+        check(f"M15 {name}: Lightweight Charts native crosshair follows touch at a free logical position",
+              crosshair_state["customOverlayAbsent"] and crosshair_state["activeEvents"] > 0 and crosshair_state["fractionalLogical"],
+              crosshair_state)
+        pg.evaluate("() => window.__sendNativeTouchEnd()")
+        pg.wait_for_timeout(80)
+        cleared = e2("() => window.__touchCrosshairMoves.at(-1)?.logical === null")
+        check(f"M15 {name}: native crosshair clears when the finger is lifted", cleared)
+        pg.evaluate("() => window.__touchCrosshairUnsubscribe?.()")
         for menu_name, mid in [("Indicators", "menu-indicators"), ("SMA", "menu-sma")]:
             tr = pg.get_by_role("button", name=menu_name).first
             tb = tr.bounding_box()
