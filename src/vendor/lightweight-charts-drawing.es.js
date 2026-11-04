@@ -415,11 +415,19 @@ class Cr {
     if (!Number.isInteger(added) || added <= 0) return;
     for (const drawing of this._drawings.values()) {
       drawing.anchors = drawing.anchors.map((anchor) =>
-        Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
+        Number.isFinite(anchor.logical) ? {
+          ...anchor,
+          logical: anchor.logical + added,
+          logicalOffset: (Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0) + added
+        } : anchor
       );
     }
     this._pendingAnchors = this._pendingAnchors.map((anchor) =>
-      Number.isFinite(anchor.logical) ? { ...anchor, logical: anchor.logical + added } : anchor
+      Number.isFinite(anchor.logical) ? {
+        ...anchor,
+        logical: anchor.logical + added,
+        logicalOffset: (Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0) + added
+      } : anchor
     );
   }
   // ============ Selection ============
