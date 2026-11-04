@@ -17,12 +17,25 @@ function logicalBarSpan(first, second, legacyDays = 0) {
     : legacyDays;
 }
 function anchorToCoordinate(anchor, timeScale) {
-  if (Number.isFinite(anchor?.logical)) {
-    if (typeof timeScale.logicalToCoordinate !== "function") return null;
-    const logicalCoordinate = timeScale.logicalToCoordinate(anchor.logical);
-    return Number.isFinite(logicalCoordinate) ? logicalCoordinate : null;
+  // A timestamp identifies the candle across reloads, imports and history changes.
+  // Never let a stale persisted logical index override that stable identity.
+  const timeCoordinate = timeScale.timeToCoordinate(anchor.time);
+  if (timeCoordinate !== null && timeCoordinate !== void 0 && Number.isFinite(timeCoordinate)) {
+    const offset = Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0;
+    if (offset !== 0 &&
+        typeof timeScale.coordinateToLogical === "function" &&
+        typeof timeScale.logicalToCoordinate === "function") {
+      const baseLogical = timeScale.coordinateToLogical(timeCoordinate);
+      if (Number.isFinite(baseLogical)) {
+        const offsetCoordinate = timeScale.logicalToCoordinate(baseLogical + offset);
+        if (Number.isFinite(offsetCoordinate)) return offsetCoordinate;
+      }
+    }
+    return timeCoordinate;
   }
-  return timeScale.timeToCoordinate(anchor.time);
+  // Do not fall back to a stale logical value when the timestamp is not in the
+  // current dataset. The drawing becomes visible again when that history is loaded.
+  return null;
 }
 function L(u, i, t) {
   const s = t.x - i.x, e = t.y - i.y, n = s * s + e * e;
@@ -418,7 +431,7 @@ class Cr {
         Number.isFinite(anchor.logical) ? {
           ...anchor,
           logical: anchor.logical + added,
-          logicalOffset: (Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0) + added
+          logicalOffset: Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0
         } : anchor
       );
     }
@@ -426,7 +439,7 @@ class Cr {
       Number.isFinite(anchor.logical) ? {
         ...anchor,
         logical: anchor.logical + added,
-        logicalOffset: (Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0) + added
+        logicalOffset: Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0
       } : anchor
     );
   }

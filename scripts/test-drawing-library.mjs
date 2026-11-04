@@ -87,18 +87,17 @@ manager3.setActiveTool('trend-line');
 const pointerUpAt = (x, y) => container.listeners.get('pointerup')({ clientX: x + 137, clientY: y + 20, button: 0 });
 pointerUpAt(120, 90);
 assert.equal(manager3.getAllDrawings().length, 0, 'multi-anchor drawing waits for its second pointer-up');
-manager3.shiftLogicalAnchors(5);
 pointerUpAt(180, 130);
 assert.equal(manager3.getAllDrawings().length, 1, 'drawing is registered after required anchors are placed');
 const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
-assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 17, logicalOffset: 5, price: 100 }, { time: 1.8, logical: 18, logicalOffset: 0, price: 100 }], 'pending anchors shift with history prepends without changing their timestamps');
+assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 12, logicalOffset: 0, price: 100 }, { time: 1.8, logical: 18, logicalOffset: 0, price: 100 }], 'new anchors are normalized against their stable timestamps');
 assert.equal(placed.seriesId, 'A');
 manager3.shiftLogicalAnchors(5);
-assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 22, logicalOffset: 10, price: 100 }, { time: 1.8, logical: 23, logicalOffset: 5, price: 100 }], 'prepending older candles shifts completed logical anchors but preserves timestamp identity');
+assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 17, logicalOffset: 0, price: 100 }, { time: 1.8, logical: 23, logicalOffset: 0, price: 100 }], 'prepending older candles shifts logical indices without changing the fractional offset within each candle');
 assert.equal(manager3.getActiveTool(), null, 'tool exits after placement is complete');
 
-// Logical coordinates are the primary geometry; timestamps are a legacy fallback.
+// Timestamps are the stable geometry; logical indices are rebased metadata and logicalOffset preserves sub-bar placement.
 const coordinateViewport = {
   timeScale: {
     timeToCoordinate: () => 999,
@@ -109,11 +108,13 @@ const coordinateViewport = {
   priceScale: { priceToCoordinate: (price) => price * 2, coordinateToPrice: (y) => y / 2 },
 };
 const logicalTrend = new TrendLine('logical-line', [{ time: 42, logical: 3, price: 5 }]);
-assert.deepEqual(logicalTrend.anchorToPixel(logicalTrend.anchors[0], coordinateViewport), { x: 21, y: 10 }, 'logical index wins over timestamp when projecting an anchor');
+assert.deepEqual(logicalTrend.anchorToPixel(logicalTrend.anchors[0], coordinateViewport), { x: 999, y: 10 }, 'stable timestamp wins over a stale persisted logical index');
+const offsetTrend = new TrendLine('offset-line', [{ time: 42, logical: -100, logicalOffset: 0.5, price: 5 }]);
+assert.deepEqual(offsetTrend.anchorToPixel(offsetTrend.anchors[0], coordinateViewport), { x: 1002.5, y: 10 }, 'fractional logical offset is applied relative to the stable timestamp');
 const unavailableLogicalViewport = { ...coordinateViewport, timeScale: { ...coordinateViewport.timeScale, logicalToCoordinate: () => null } };
-assert.equal(logicalTrend.anchorToPixel(logicalTrend.anchors[0], unavailableLogicalViewport), null, 'an authoritative logical anchor does not silently fall back to a potentially conflicting timestamp');
+assert.deepEqual(logicalTrend.anchorToPixel(logicalTrend.anchors[0], unavailableLogicalViewport), { x: 999, y: 10 }, 'timestamp projection remains available even when logical projection is unavailable');
 const missingLogicalProjection = { ...coordinateViewport, timeScale: { timeToCoordinate: () => 999 } };
-assert.equal(logicalTrend.anchorToPixel(logicalTrend.anchors[0], missingLogicalProjection), null, 'a logical anchor is never silently treated as a timestamp if logical projection is unavailable');
+assert.deepEqual(logicalTrend.anchorToPixel(logicalTrend.anchors[0], missingLogicalProjection), { x: 999, y: 10 }, 'stable time projection does not require a persisted logical projection');
 const legacyTrend = new TrendLine('legacy-line', [{ time: 42, price: 5 }]);
 assert.deepEqual(legacyTrend.anchorToPixel(legacyTrend.anchors[0], coordinateViewport), { x: 999, y: 10 }, 'legacy time-only anchors still render through the timestamp fallback');
 assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport), { time: 0.21, logical: 3, logicalOffset: 3 - 999 / 7, price: 5 }, 'editing an anchor preserves its fractional position relative to its timestamp');
@@ -124,6 +125,7 @@ const shiftedChart = {
   timeScale: () => ({
     ...chart.timeScale(),
     coordinateToLogical: (x) => x / 10 + 50,
+    logicalToCoordinate: (logical) => (logical - 50) * 10,
   }),
 };
 const manager4 = new DrawingManager();
@@ -138,6 +140,15 @@ manager4.importDrawings([{
 }], createDrawing, () => seriesA, () => seriesA);
 assert.deepEqual(manager4.getDrawing('rebased-line').anchors.map((anchor) => anchor.logical), [60.25, 69.75],
   'timestamp rebasing follows the new chart origin while retaining fractional offsets');
+const rebasedDrawing = manager4.getDrawing('rebased-line');
+assert.deepEqual(
+  rebasedDrawing.anchorToPixel(rebasedDrawing.anchors[0], {
+    timeScale: shiftedChart.timeScale(),
+    priceScale: { priceToCoordinate: () => 100 },
+  }),
+  { x: 102.5, y: 100 },
+  'an imported drawing renders at the timestamp position plus its fractional in-bar offset, not its stale saved logical index',
+);
 manager4.detach();
 
 // Bar measurements use logical candle distance; elapsed days remain timestamp-based.

@@ -63,7 +63,7 @@ describe('portable backup formats', () => {
     ]);
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Security Prices');
     const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
-    const imported = parseWorkbookBuffer(bytes, 'BBSY Al Baraka Bank - Syria.xlsx');
+    const imported = parseWorkbookBuffer(bytes, 'BBSY Al Baraka Bank - Syria 2010-01-01 to 2026-01-04.xlsx');
     expect(imported.BBSY).toEqual([
       { date: '2014-11-10', open: 1.33, high: 1.33, low: 1.33, close: 1.33, volume: 10555, valueTraded: null },
       { date: '2014-11-11', open: 1.39, high: 1.39, low: 1.34, close: 1.39, volume: 33424, valueTraded: null },
