@@ -119,7 +119,12 @@ export class DrawingController {
     }
   }
 
-  /** Shift logical drawing anchors when older candles are prepended to the data set. */
+  /** Recalculate logical positions from stable timestamps after the chart dataset changes. */
+  rebaseLogicalAnchors(): void {
+    this.#manager.rebaseLogicalAnchors();
+  }
+
+  /** Retained for callers that explicitly shift an existing logical-only viewport. */
   shiftLogicalAnchors(added: number): void {
     this.#manager.shiftLogicalAnchors(added);
   }

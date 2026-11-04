@@ -214,11 +214,12 @@ export class ChartController {
    * separate method that does not touch the viewport.
    */
   setCandles(candles: readonly Candle[]): void {
-    if (this.#chart === null || this.#series === null || this.#viewport === null) {
+    if (this.#chart === null || this.#series === null || this.#viewport === null || this.#drawings === null) {
       throw new Error('ChartController is not mounted.');
     }
     this.#priceCandles = [...candles];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
+    this.#drawings.rebaseLogicalAnchors();
     this.#viewport.fitContent();
     this.#updatePriceScaleWidth();
   }
@@ -248,7 +249,7 @@ export class ChartController {
     const range = this.#viewport.getLogicalRange();
     this.#priceCandles = [...all];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
-    if (added > 0) this.#drawings.shiftLogicalAnchors(added);
+    this.#drawings.rebaseLogicalAnchors();
     if (range !== null && added > 0) {
       this.#viewport.setLogicalRange({ from: range.from + added, to: range.to + added });
     }

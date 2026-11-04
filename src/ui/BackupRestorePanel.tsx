@@ -129,7 +129,7 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
       setDialog(null);
       setMessage({
         text: marketMode === 'update'
-          ? `اكتمل التحديث: أُضيفت ${result.added} شمعة جديدة، وتُركت ${result.kept} شمعة موجودة دون تعديل. الرموز: ${result.symbols.join('، ')}.`
+          ? `اكتمل التحديث: أُضيفت ${result.added} شمعة جديدة، واستُكملت بيانات ${result.updated} شمعة موجودة كانت تحتوي حقولاً ناقصة، وبقيت ${result.kept} شمعة دون تغيير. الرموز: ${result.symbols.join('، ')}.`
           : `تم استبدال قاعدة البيانات بالملف المحدد. عدد الشموع المستوردة: ${result.added}.`,
         error: false,
       });
@@ -217,7 +217,7 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
                 <p>حدد كيفية التعامل مع الملف الذي ستختاره، ثم اضغط تأكيد لاختياره.</p>
                 <label className="backup-radio">
                   <input type="radio" name="market-import-mode" checked={marketMode === 'update'} onChange={() => setMarketMode('update')} />
-                  <span><strong>تحديث البيانات</strong><small>إضافة التواريخ غير الموجودة فقط، دون تعديل أي شمعة موجودة.</small></span>
+                  <span><strong>تحديث البيانات</strong><small>إضافة التواريخ الجديدة واستكمال الحقول الناقصة في الشموع الموجودة، دون استبدال القيم المتوفرة.</small></span>
                 </label>
                 <label className="backup-radio">
                   <input type="radio" name="market-import-mode" checked={marketMode === 'replace'} onChange={() => setMarketMode('replace')} />

@@ -211,6 +211,49 @@ describe('DSEProvider', () => {
     expect(provider.exportDatabase().ABC).toHaveLength(1);
   });
 
+  it('fills only missing optional fields on matching dates during import updates', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
+    const provider = new DSEProvider();
+    provider.importDatabase({ BBSY: [
+      { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: null, valueTraded: null },
+      { date: '2026-01-02', open: 20, high: 22, low: 19, close: 21, volume: 50, valueTraded: null },
+    ] }, 'replace');
+
+    const result = provider.importDatabase({ BBSY: [
+      { date: '2026-01-01', open: 99, high: 99, low: 99, close: 99, volume: 100, valueTraded: 1000 },
+      { date: '2026-01-02', open: 99, high: 99, low: 99, close: 99, volume: 999, valueTraded: 2000 },
+      { date: '2026-01-03', open: 30, high: 32, low: 29, close: 31, volume: 60, valueTraded: 3000 },
+    ] }, 'update');
+
+    expect(result).toMatchObject({ added: 1, updated: 2, kept: 0 });
+    expect(provider.exportDatabase().BBSY).toEqual([
+      { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000 },
+      { date: '2026-01-02', open: 20, high: 22, low: 19, close: 21, volume: 50, valueTraded: 2000 },
+      { date: '2026-01-03', open: 30, high: 32, low: 29, close: 31, volume: 60, valueTraded: 3000 },
+    ]);
+  });
+
+  it('fills previously missing traded value during a network refresh without overwriting existing prices', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
+    const provider = new DSEProvider();
+    provider.importDatabase({ BBSY: [
+      { date: '2026-01-26', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: null },
+    ] }, 'replace');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([
+      { date: '2026-01-26', open: '99', high: '99', low: '99', close: '99', volume_traded: '999', value_traded: '1100' },
+    ]), { status: 200 })));
+    const bars = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    expect(bars[0]).toMatchObject({ open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1100 });
+  });
+
   it('keeps the previous cached history if an explicit refresh fails', async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('window', { localStorage: {
