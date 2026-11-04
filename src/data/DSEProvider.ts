@@ -177,26 +177,44 @@ export class DSEProvider implements MarketDataProvider {
     incoming: Record<string, DailyRow[]>,
     mode: 'update' | 'replace',
   ): { added: number; kept: number; symbols: string[] } {
-    let added = 0;
-    let kept = 0;
-    const touched: string[] = [];
-    if (mode === 'replace') {
-      for (const item of DSE_SYMBOLS) {
-        this.#memoryCache.delete(item.symbol);
-        try { window.localStorage.removeItem(this.#cacheKey(item.symbol)); } catch { /* storage may be unavailable */ }
-      }
-    }
-    for (const item of DSE_SYMBOLS) {
-      const supplied = incoming[item.symbol];
-      if (supplied === undefined) continue;
+    const touched = DSE_SYMBOLS.filter((item) => incoming[item.symbol] !== undefined);
+    const plans = (mode === 'replace' ? DSE_SYMBOLS : touched).map((item) => {
+      const supplied = incoming[item.symbol] ?? [];
       const current = mode === 'update' ? (this.#readCachedDaily(item.symbol) ?? []) : [];
       const merged = mergeDailyRows(current, supplied);
-      added += merged.added;
-      kept += merged.kept;
-      this.#writeCachedDaily(item.symbol, merged.rows);
-      touched.push(item.symbol);
+      return { symbol: item.symbol, rows: merged.rows, added: merged.added, kept: merged.kept };
+    });
+    const storage = window.localStorage;
+    const keys = mode === 'replace' ? DSE_SYMBOLS.map((item) => this.#cacheKey(item.symbol)) : plans.map((plan) => this.#cacheKey(plan.symbol));
+    const previous = new Map<string, string | null>();
+    try {
+      for (const key of keys) previous.set(key, storage.getItem(key));
+    } catch {
+      throw new Error('تعذر قراءة قاعدة البيانات المحلية؛ لم يتم استيراد أي بيانات.');
     }
-    return { added, kept, symbols: touched };
+    try {
+      for (const plan of plans) storage.setItem(this.#cacheKey(plan.symbol), JSON.stringify(plan.rows));
+      // Replace mode also writes empty arrays for symbols absent from the selected reference file.
+      if (mode === 'replace') {
+        const included = new Set(plans.map((plan) => plan.symbol));
+        for (const item of DSE_SYMBOLS) {
+          if (!included.has(item.symbol)) storage.setItem(this.#cacheKey(item.symbol), '[]');
+        }
+      }
+    } catch (error) {
+      for (const [key, value] of previous) {
+        try { storage.setItem(key, value ?? '[]'); } catch { /* best-effort rollback */ }
+      }
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`تعذر حفظ قاعدة البيانات المستوردة محلياً؛ لم يكتمل الاستيراد. ${detail}`);
+    }
+    if (mode === 'replace') this.#memoryCache.clear();
+    for (const plan of plans) this.#memoryCache.set(plan.symbol, plan.rows);
+    return {
+      added: plans.reduce((sum, plan) => sum + plan.added, 0),
+      kept: plans.reduce((sum, plan) => sum + plan.kept, 0),
+      symbols: touched.map((item) => item.symbol),
+    };
   }
 
   /** Refresh every configured symbol sequentially so later symbol changes can use local history. */
