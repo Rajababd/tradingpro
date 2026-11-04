@@ -55,6 +55,17 @@ with sync_playwright() as p:
     with open(path, encoding="utf-8") as f: drawing_export = json.load(f)
     check("drawing export is a versioned JSON file", drawing_export.get("format") == "tradingpro-drawings" and drawing_export.get("version") == 1)
 
+    page.get_by_role("button", name="تصدير البيانات").click()
+    with page.expect_download() as market_download_info:
+        page.get_by_role("button", name="تصدير", exact=True).click()
+    market_download = market_download_info.value
+    market_path = "/tmp/" + market_download.suggested_filename
+    market_download.save_as(market_path)
+    with open(market_path, encoding="utf-8") as f: market_export = json.load(f)
+    check("market export is a versioned database containing all six symbols",
+          market_export.get("format") == "tradingpro-market-database" and
+          set(market_export.get("symbols", {})) == {"DWX", "AVOC", "ABC", "BBSY", "NIB", "AHT"})
+
     # Import a duplicate date with a conflicting close plus one genuinely new date.
     import_payload = {
         "format": "tradingpro-market-database", "version": 1, "exportedAt": "2026-11-04T00:00:00.000Z",
