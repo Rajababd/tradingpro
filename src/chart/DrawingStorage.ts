@@ -21,7 +21,8 @@ function isAnchor(value: unknown): boolean {
   const timeValid = typeof value.time === 'string' || (typeof value.time === 'number' && Number.isFinite(value.time));
   return timeValid &&
     Number.isFinite(value.price) &&
-    (value.logical === undefined || (typeof value.logical === 'number' && Number.isFinite(value.logical)));
+    (value.logical === undefined || (typeof value.logical === 'number' && Number.isFinite(value.logical))) &&
+    (value.logicalOffset === undefined || (typeof value.logicalOffset === 'number' && Number.isFinite(value.logicalOffset)));
 }
 
 export function validateDrawings(value: unknown): DrawingJSON[] | null {
