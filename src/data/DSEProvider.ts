@@ -149,6 +149,50 @@ export class DSEProvider implements MarketDataProvider {
     return this.#readCachedDaily(symbol) !== null;
   }
 
+  /** Portable, versioned snapshot of every symbol's canonical daily history. */
+  exportDatabase(): Record<string, DailyRow[]> {
+    const result: Record<string, DailyRow[]> = {};
+    for (const item of DSE_SYMBOLS) result[item.symbol] = this.#readCachedDaily(item.symbol) ?? [];
+    return result;
+  }
+
+  /**
+   * Imports validated daily rows. "update" adds only dates not already present;
+   * existing dates are deliberately never overwritten. "replace" makes the
+   * supplied database the complete reference snapshot.
+   */
+  importDatabase(
+    incoming: Record<string, DailyRow[]>,
+    mode: 'update' | 'replace',
+  ): { added: number; kept: number; symbols: string[] } {
+    let added = 0;
+    let kept = 0;
+    const touched: string[] = [];
+    if (mode === 'replace') {
+      for (const item of DSE_SYMBOLS) {
+        this.#memoryCache.delete(item.symbol);
+        try { window.localStorage.removeItem(this.#cacheKey(item.symbol)); } catch { /* storage may be unavailable */ }
+      }
+    }
+    for (const item of DSE_SYMBOLS) {
+      const supplied = incoming[item.symbol];
+      if (supplied === undefined) continue;
+      const current = mode === 'update' ? (this.#readCachedDaily(item.symbol) ?? []) : [];
+      const dates = new Set(current.map((row) => row.date));
+      const merged = [...current];
+      for (const row of supplied) {
+        if (dates.has(row.date)) { kept++; continue; }
+        dates.add(row.date);
+        merged.push(row);
+        added++;
+      }
+      merged.sort((a, b) => a.date.localeCompare(b.date));
+      this.#writeCachedDaily(item.symbol, merged);
+      touched.push(item.symbol);
+    }
+    return { added, kept, symbols: touched };
+  }
+
   /** Refresh every configured symbol sequentially so later symbol changes can use local history. */
   async refreshAll(): Promise<{ refreshed: string[]; failed: string[] }> {
     const refreshed: string[] = [];
@@ -257,10 +301,15 @@ export class DSEProvider implements MarketDataProvider {
         throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
       }
       const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
-      // Replace the cache only after a non-empty, parseable response is confirmed.
-      this.#writeCachedDaily(symbol, sortedDaily);
+      // A refresh is an additive update: dates already present remain untouched.
+      // This is intentionally identical to the "update data" import policy.
+      const existing = cached ?? [];
+      const knownDates = new Set(existing.map((row) => row.date));
+      const merged = [...existing, ...sortedDaily.filter((row) => !knownDates.has(row.date))]
+        .sort((a, b) => a.date.localeCompare(b.date));
+      this.#writeCachedDaily(symbol, merged);
       this.lastRefreshWarning = null;
-      return aggregateDaily(sortedDaily, timeframe);
+      return aggregateDaily(merged, timeframe);
     } catch (error) {
       if (signal?.aborted) throw error;
       if (refresh && cached !== null) {

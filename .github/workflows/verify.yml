@@ -89,6 +89,9 @@ jobs:
       - name: Verify drawing interactions on desktop and phone viewport
         run: python scripts/verify-drawing-app.py
 
+      - name: Verify backup, restore and additive market-data updates
+        run: python scripts/verify-backup-restore.py
+
       - name: Show Vite logs if browser test failed
         if: failure()
         run: cat /tmp/tradingpro-vite.log || true

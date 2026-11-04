@@ -73,8 +73,9 @@ with sync_playwright() as p:
     # Compact shell acceptance: two 40px rows and a narrow left drawing rail.
     shell = ev("""(() => {
       const box = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return {x:r.x, right:r.right, width:r.width, height:r.height}; };
-      const buttons = [...document.querySelectorAll('.side-toolbar .drawing-tool-button')].map((el) => { const r = el.getBoundingClientRect(); return {w:r.width,h:r.height}; });
-      return {top:box('.topbar'), second:box('.toolbar-row'), rail:box('.side-toolbar'), chart:box('.chart-area'), buttons};
+      const buttons = [...document.querySelectorAll('.side-toolbar > .drawing-toolbar .drawing-tool-button')].map((el) => { const r = el.getBoundingClientRect(); return {w:r.width,h:r.height}; });
+      const backupButtons = [...document.querySelectorAll('.backup-tools .backup-action')].map((el) => el.getAttribute('aria-label'));
+      return {top:box('.topbar'), second:box('.toolbar-row'), rail:box('.side-toolbar'), chart:box('.chart-area'), buttons, backupButtons};
     })()""")
     check("compact shell: first top row is exactly 40px", abs(shell["top"]["height"] - 40) <= 0.5, shell)
     check("compact shell: second top row is exactly 40px", abs(shell["second"]["height"] - 40) <= 0.5, shell)
@@ -82,6 +83,8 @@ with sync_playwright() as p:
           38 <= shell["rail"]["width"] <= 44 and abs(shell["chart"]["x"] - shell["rail"]["right"]) <= 1, shell)
     check("compact shell: four remaining drawing controls are square icon buttons",
           len(shell["buttons"]) == 4 and all(abs(b["w"] - b["h"]) <= 1 for b in shell["buttons"]), shell)
+    check("backup and restore controls appear below drawing tools in the side rail",
+          shell["backupButtons"] == ["تصدير البيانات", "استيراد البيانات"], shell)
     check("compact shell: both top menus are visible inside the second row",
           page.get_by_role("button", name="Indicators").is_visible() and page.get_by_role("button", name="SMA").is_visible(), shell)
     check("compact shell: symbol selector and refresh action are visible in the first row",
