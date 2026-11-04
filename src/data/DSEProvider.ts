@@ -13,16 +13,33 @@ export const DSE_SYMBOLS = [
 type DseSymbol = (typeof DSE_SYMBOLS)[number];
 type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null; corrected?: boolean };
 
-export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly DailyRow[]): { rows: DailyRow[]; added: number; kept: number } {
+export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly DailyRow[]): { rows: DailyRow[]; added: number; updated: number; kept: number } {
   const byDate = new Map(existing.map((row) => [row.date, row]));
   let added = 0;
+  let updated = 0;
   let kept = 0;
   for (const row of incoming) {
-    if (byDate.has(row.date)) { kept++; continue; }
-    byDate.set(row.date, row);
-    added++;
+    const current = byDate.get(row.date);
+    if (!current) {
+      byDate.set(row.date, row);
+      added++;
+      continue;
+    }
+    // Existing non-null values remain authoritative. Fill only fields that were
+    // unavailable in the stored candle, such as traded value in older imports.
+    const completed: DailyRow = {
+      ...current,
+      volume: current.volume ?? row.volume,
+      valueTraded: current.valueTraded ?? row.valueTraded,
+    };
+    if (completed.volume !== current.volume || completed.valueTraded !== current.valueTraded) {
+      byDate.set(row.date, completed);
+      updated++;
+    } else {
+      kept++;
+    }
   }
-  return { rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)), added, kept };
+  return { rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)), added, updated, kept };
 }
 
 const numberOrNull = (value: unknown): number | null => {
@@ -182,7 +199,7 @@ export class DSEProvider implements MarketDataProvider {
       const supplied = incoming[item.symbol] ?? [];
       const current = mode === 'update' ? (this.#readCachedDaily(item.symbol) ?? []) : [];
       const merged = mergeDailyRows(current, supplied);
-      return { symbol: item.symbol, rows: merged.rows, added: merged.added, kept: merged.kept };
+      return { symbol: item.symbol, rows: merged.rows, added: merged.added, updated: merged.updated, kept: merged.kept };
     });
     const storage = window.localStorage;
     const keys = mode === 'replace' ? DSE_SYMBOLS.map((item) => this.#cacheKey(item.symbol)) : plans.map((plan) => this.#cacheKey(plan.symbol));
@@ -212,6 +229,7 @@ export class DSEProvider implements MarketDataProvider {
     for (const plan of plans) this.#memoryCache.set(plan.symbol, plan.rows);
     return {
       added: plans.reduce((sum, plan) => sum + plan.added, 0),
+      updated: plans.reduce((sum, plan) => sum + plan.updated, 0),
       kept: plans.reduce((sum, plan) => sum + plan.kept, 0),
       symbols: touched.map((item) => item.symbol),
     };
