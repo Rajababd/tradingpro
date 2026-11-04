@@ -180,8 +180,18 @@ export function App() {
             controller={session?.chart.drawings ?? null}
             symbol={symbol}
             timeframe={timeframe}
-            onMarketDataImported={async () => {
-              if (session) await session.service.load({ symbol, timeframe, limit: config.initialBars });
+            onMarketDataImported={async (importedSymbols) => {
+              if (session === null) return;
+              if (!provider.hasCachedData(symbol)) {
+                const nextSymbol = importedSymbols.find((candidate) => provider.hasCachedData(candidate));
+                if (nextSymbol) {
+                  setSymbol(nextSymbol);
+                  return;
+                }
+              }
+              if (provider.hasCachedData(symbol)) {
+                await session.service.load({ symbol, timeframe, limit: config.initialBars });
+              }
             }}
           />
         </aside>
