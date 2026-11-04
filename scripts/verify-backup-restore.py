@@ -1,6 +1,7 @@
 """End-to-end acceptance tests for portable backups and additive market-data imports."""
 import json
 import sys
+import zipfile
 from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 
@@ -90,6 +91,31 @@ with sync_playwright() as p:
     duplicate = next(r for r in cached if r["date"] == daily[0]["date"])
     check("update import adds a date absent from the existing database", any(r["date"] == "2027-01-01" for r in cached))
     check("update import does not overwrite a duplicate date", duplicate["close"] == float(daily[0]["close"]), duplicate)
+
+    # Build a minimal genuine XLSX file and import it using the spreadsheet reader.
+    xlsx_path = "/tmp/tradingpro-import.xlsx"
+    xlsx_parts = {
+      "xl/workbook.xml": """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>""",
+      "xl/_rels/workbook.xml.rels": """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>""",
+      "xl/worksheets/sheet1.xml": """<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
+      <row r="1"><c r="A1" t="inlineStr"><is><t>Symbol</t></is></c><c r="B1" t="inlineStr"><is><t>Date</t></is></c><c r="C1" t="inlineStr"><is><t>Open</t></is></c><c r="D1" t="inlineStr"><is><t>High</t></is></c><c r="E1" t="inlineStr"><is><t>Low</t></is></c><c r="F1" t="inlineStr"><is><t>Close</t></is></c><c r="G1" t="inlineStr"><is><t>Volume</t></is></c></row>
+      <row r="2"><c r="A2" t="inlineStr"><is><t>BBSY</t></is></c><c r="B2" t="inlineStr"><is><t>2031-01-02</t></is></c><c r="C2"><v>30</v></c><c r="D2"><v>32</v></c><c r="E2"><v>29</v></c><c r="F2"><v>31</v></c><c r="G2"><v>20</v></c></row>
+      </sheetData></worksheet>"""
+    }
+    with zipfile.ZipFile(xlsx_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, value in xlsx_parts.items(): archive.writestr(name, value)
+    page.get_by_role("button", name="استيراد البيانات").click()
+    page.get_by_role("button", name="استيراد بيانات الأسهم").click()
+    page.get_by_role("button", name="تأكيد واختيار الملف").click()
+    page.locator("input[type=file]").nth(0).set_input_files(xlsx_path)
+    page.wait_for_function("""() => {
+      const rows = JSON.parse(localStorage.getItem('tradingpro:dse:daily:v1:BBSY') || '[]');
+      return rows.some(r => r.date === '2031-01-02');
+    }""", timeout=10000)
+    check("XLSX import reads worksheet cells and adds the candle", page.evaluate("""() => {
+      const rows = JSON.parse(localStorage.getItem('tradingpro:dse:daily:v1:BBSY') || '[]');
+      return rows.some(r => r.date === '2031-01-02' && r.close === 31 && r.volume === 20);
+    }"""))
 
     # Top-bar network refresh must use the exact same additive date policy.
     page.get_by_role("button", name="تحديث البيانات").click()
