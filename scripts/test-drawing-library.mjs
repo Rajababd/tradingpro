@@ -127,7 +127,8 @@ const shiftedChart = {
   }),
 };
 const manager4 = new DrawingManager();
-manager4.attach(shiftedChart, seriesA, container, (series) => series.id, (id) => id === 'A' ? seriesA : undefined);
+const container4 = makeContainer();
+manager4.attach(shiftedChart, seriesA, container4, (series) => series.id, (id) => id === 'A' ? seriesA : undefined);
 manager4.importDrawings([{
   id: 'rebased-line', type: 'trend-line', seriesId: 'A', paneIndex: 0,
   anchors: [
