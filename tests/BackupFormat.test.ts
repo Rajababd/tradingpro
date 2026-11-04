@@ -54,6 +54,22 @@ describe('portable backup formats', () => {
     expect(namedSheet.ABC).toHaveLength(1);
   });
 
+  it('imports the supplied BBSY Arabic spreadsheet layout using the filename as the symbol', () => {
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['التاريخ', 'إفتتاح', 'أعلى', 'أدنى', 'الإغلاق', 'التغير %', 'حجم التداول'],
+      ['2014-11-10', 1.33, 1.33, 1.33, 1.33, 32.5, 10555],
+      ['2014-11-11', 1.39, 1.39, 1.34, 1.39, 4.68, 33424],
+    ]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Security Prices');
+    const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+    const imported = parseWorkbookBuffer(bytes, 'BBSY Al Baraka Bank - Syria.xlsx');
+    expect(imported.BBSY).toEqual([
+      { date: '2014-11-10', open: 1.33, high: 1.33, low: 1.33, close: 1.33, volume: 10555, valueTraded: null },
+      { date: '2014-11-11', open: 1.39, high: 1.39, low: 1.34, close: 1.39, volume: 33424, valueTraded: null },
+    ]);
+  });
+
   it.each(['xls', 'xlsx', 'xlsm', 'xlsb'] as const)('imports %s workbooks with date cells and symbol-named sheets', (bookType) => {
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet([
