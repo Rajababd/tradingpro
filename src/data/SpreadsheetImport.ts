@@ -121,7 +121,10 @@ export function parseWorkbookBuffer(buffer: ArrayBuffer, fileName?: string): Imp
 function symbolFromFileName(fileName?: string): string | undefined {
   if (!fileName) return undefined;
   const base = fileName.toUpperCase().split(/[\\\\/]/).pop() ?? fileName.toUpperCase();
-  return DSE_SYMBOLS.find(({ symbol }) => new RegExp(`(?:^|[^A-Z0-9])${symbol}(?:$|[^A-Z0-9])`).test(base))?.symbol;
+  // Treat punctuation, spaces and date ranges as token boundaries. This keeps
+  // symbols such as BBSY detectable in descriptive filenames from Android pickers.
+  const tokens = new Set(base.split(/[^A-Z0-9]+/).filter(Boolean));
+  return DSE_SYMBOLS.find(({ symbol }) => tokens.has(symbol))?.symbol;
 }
 
 export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> {
