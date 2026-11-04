@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - feat/dse-weekly-monthly-timeframes
+      - feature/backup-import-hardening
+      - fix/drawing-anchor-stability-bbsy-import
     paths:
       - 'src/**'
       - 'public/**'
