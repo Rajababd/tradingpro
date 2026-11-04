@@ -125,6 +125,7 @@ const shiftedChart = {
   timeScale: () => ({
     ...chart.timeScale(),
     coordinateToLogical: (x) => x / 10 + 50,
+    logicalToCoordinate: (logical) => (logical - 50) * 10,
   }),
 };
 const manager4 = new DrawingManager();
@@ -139,6 +140,15 @@ manager4.importDrawings([{
 }], createDrawing, () => seriesA, () => seriesA);
 assert.deepEqual(manager4.getDrawing('rebased-line').anchors.map((anchor) => anchor.logical), [60.25, 69.75],
   'timestamp rebasing follows the new chart origin while retaining fractional offsets');
+const rebasedDrawing = manager4.getDrawing('rebased-line');
+assert.deepEqual(
+  rebasedDrawing.anchorToPixel(rebasedDrawing.anchors[0], {
+    timeScale: shiftedChart.timeScale(),
+    priceScale: { priceToCoordinate: () => 100 },
+  }),
+  { x: 102.5, y: 100 },
+  'an imported drawing renders at the timestamp position plus its fractional in-bar offset, not its stale saved logical index',
+);
 manager4.detach();
 
 // Bar measurements use logical candle distance; elapsed days remain timestamp-based.
