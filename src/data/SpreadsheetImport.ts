@@ -127,7 +127,7 @@ export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> 
   }
   if (extension === 'xml') {
     const text = await file.text();
-    const workbook = XLSX.read(text, { type: 'string', cellDates: true, raw: true });
+    const workbook = XLSX.read(text, { type: 'string', cellDates: false, raw: true });
     const out: ImportedMarketRows = {};
     for (const name of workbook.SheetNames) {
       const sheet = workbook.Sheets[name];
