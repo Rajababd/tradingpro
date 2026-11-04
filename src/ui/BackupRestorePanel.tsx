@@ -16,14 +16,28 @@ type Props = {
   onMarketDataImported: () => Promise<void>;
 };
 
-function downloadJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+async function downloadJson(filename: string, data: unknown): Promise<'shared' | 'downloaded'> {
+  const content = JSON.stringify(data, null, 2);
+  const file = new File([content], filename, { type: 'application/json;charset=utf-8' });
+  // Native Android WebViews may not implement the browser download listener.
+  // Web Share exposes the file to Android's system chooser (including Save to Files/Drive).
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return 'shared';
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      // Unsupported file sharing falls back to the standard browser download below.
+    }
+  }
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return 'downloaded';
 }
 
 export function BackupRestorePanel({ provider, controller, symbol, timeframe, onMarketDataImported }: Props) {
@@ -37,17 +51,17 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
   const drawingsInput = useRef<HTMLInputElement>(null);
 
   const close = () => { if (!busy) setDialog(null); };
-  const exportSelected = () => {
+  const exportSelected = async () => {
     const stamp = new Date().toISOString().slice(0, 10);
+    const exportedAt = new Date().toISOString();
+    let marketBackup: unknown;
+    let drawingBackup: unknown;
     if (exportMarket) {
       const symbols = Object.fromEntries(Object.entries(provider.exportDatabase()).map(([key, rows]) => [
         key, rows.map(({ date, open, high, low, close, volume, valueTraded }) =>
           ({ date, open, high, low, close, volume, valueTraded })),
       ]));
-      downloadJson(`tradingpro-market-database-${stamp}.json`, {
-        format: 'tradingpro-market-database', version: BACKUP_VERSION,
-        exportedAt: new Date().toISOString(), symbols,
-      });
+      marketBackup = { format: 'tradingpro-market-database', version: BACKUP_VERSION, exportedAt, symbols };
     }
     if (exportDrawings) {
       const backup = exportDrawingDatabase(window.localStorage);
@@ -58,10 +72,30 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
         if (active) active.items = items;
         else backup.drawings.push({ symbol, timeframe, items });
       }
-      downloadJson(`tradingpro-drawings-${stamp}.json`, backup);
+      drawingBackup = backup;
     }
-    setDialog(null);
-    setMessage({ text: 'تم تجهيز ملفات التصدير. احفظها في مكان آمن خارج التطبيق.', error: false });
+    let filename: string;
+    let payload: unknown;
+    if (exportMarket && exportDrawings) {
+      filename = `tradingpro-backup-${stamp}.json`;
+      payload = { format: 'tradingpro-complete-backup', version: BACKUP_VERSION, exportedAt, marketData: marketBackup, drawings: drawingBackup };
+    } else if (exportMarket) {
+      filename = `tradingpro-market-database-${stamp}.json`;
+      payload = marketBackup;
+    } else {
+      filename = `tradingpro-drawings-${stamp}.json`;
+      payload = drawingBackup;
+    }
+    try {
+      const delivery = await downloadJson(filename, payload);
+      setDialog(null);
+      setMessage({ text: delivery === 'shared'
+        ? 'تم فتح قائمة المشاركة. اختر حفظ الملف في التنزيلات أو في موقع آمن.'
+        : 'تم تنزيل ملف النسخة الاحتياطية. احفظه في مكان آمن خارج التطبيق.', error: false });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMessage({ text: error instanceof Error ? error.message : String(error), error: true });
+    }
   };
 
   const importMarketFile = async (file: File) => {
@@ -69,7 +103,10 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
     try {
       let backup;
       if (file.name.toLowerCase().endsWith('.json') || file.type.includes('json')) {
-        backup = validateMarketDatabase(JSON.parse(await file.text()));
+        const parsed: unknown = JSON.parse(await file.text());
+        const source = typeof parsed === 'object' && parsed !== null && 'format' in parsed && parsed.format === 'tradingpro-complete-backup'
+          ? (parsed as { marketData?: unknown }).marketData : parsed;
+        backup = validateMarketDatabase(source);
       } else {
         const parsed = await parseSpreadsheet(file);
         backup = validateMarketDatabase({
@@ -97,7 +134,10 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
   const importDrawingsFile = async (file: File) => {
     setBusy(true); setMessage(null);
     try {
-      const backup = validateDrawingBackup(JSON.parse(await file.text()));
+      const parsed: unknown = JSON.parse(await file.text());
+      const source = typeof parsed === 'object' && parsed !== null && 'format' in parsed && parsed.format === 'tradingpro-complete-backup'
+        ? (parsed as { drawings?: unknown }).drawings : parsed;
+      const backup = validateDrawingBackup(source);
       importDrawingDatabase(window.localStorage, backup.drawings);
       const active = backup.drawings.find((group) => group.symbol === symbol && group.timeframe === timeframe);
       if (active && controller) {
