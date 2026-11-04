@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import * as XLSX from 'xlsx';
 import { validateDrawingBackup, validateMarketDatabase } from '../src/data/BackupFormat';
-import { parseTabularRows } from '../src/data/SpreadsheetImport';
+import { parseExcelBuffer, parseTabularRows } from '../src/data/SpreadsheetImport';
 
 describe('portable backup formats', () => {
   it('validates and preserves the exported market database format', () => {
@@ -29,6 +30,23 @@ describe('portable backup formats', () => {
     });
     expect(backup.drawings[0]?.items).toHaveLength(1);
     expect(() => validateDrawingBackup({ format: 'tradingpro-drawings', version: 9, drawings: [] })).toThrow();
+  });
+
+  it.each(['xlsx', 'biff8'] as const)('imports %s workbooks with numeric Excel date cells', async (bookType) => {
+    const serialDate = (Date.UTC(2026, 0, 2) - Date.UTC(1899, 11, 30)) / 86400000;
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['Symbol', 'Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Value Traded'],
+      ['BBSY', serialDate, 10, 12, 9, 11, 100, 1000],
+    ]);
+    const dateCell = sheet.B2;
+    if (dateCell) dateCell.z = 'yyyy-mm-dd';
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Data');
+    const bytes = XLSX.write(workbook, { bookType, type: 'array' }) as ArrayBuffer;
+    const parsed = await parseExcelBuffer(bytes);
+    expect(parsed.BBSY).toEqual([{
+      date: '2026-01-02', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000,
+    }]);
   });
 
   it('imports tabular Excel/CSV rows with either a symbol column or symbol-named sheet', () => {
