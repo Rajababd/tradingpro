@@ -3,7 +3,7 @@ import { DSE_SYMBOLS } from './DSEProvider';
 
 export type ImportedMarketRows = Record<string, BackupCandle[]>;
 
-const SYMBOLS = new Set<string>(DSE_SYMBOLS.map((item) => item.symbol));
+const isKnownSymbol = (value: string): boolean => DSE_SYMBOLS.some((item) => item.symbol === value);
 const aliases: Record<string, string[]> = {
   symbol: ['symbol', 'ticker', 'code', 'الرمز', 'السهم'],
   date: ['date', 'tradingdate', 'trading_date', 'timestamp', 'التاريخ', 'تاريخ'],
@@ -43,7 +43,7 @@ function normalizeRow(row: Record<string, unknown>, symbol: string): BackupCandl
   const open = number(row.open), high = number(row.high), low = number(row.low), close = number(row.close);
   const volume = row.volume === undefined || row.volume === '' ? null : number(row.volume);
   const valueTraded = row.valueTraded === undefined || row.valueTraded === '' ? null : number(row.valueTraded);
-  if (!SYMBOLS.has(symbol) || !date || open === null || high === null || low === null || close === null ||
+  if (!isKnownSymbol(symbol) || !date || open === null || high === null || low === null || close === null ||
       open <= 0 || high <= 0 || low <= 0 || close <= 0 ||
       (volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
   return { date, open, high: Math.max(high, open, close), low: Math.min(low, open, close),
@@ -72,7 +72,7 @@ export function parseTabularRows(rows: unknown[][], sheetName?: string): Importe
   const records = rows.slice(1).map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index]])));
   const sheetSymbol = sheetName?.toUpperCase();
   const out: ImportedMarketRows = {};
-  addRows(out, records, sheetSymbol && SYMBOLS.has(sheetSymbol) ? sheetSymbol : undefined);
+  addRows(out, records, sheetSymbol && isKnownSymbol(sheetSymbol) ? sheetSymbol : undefined);
   return out;
 }
 export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> {
