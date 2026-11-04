@@ -179,7 +179,7 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
         <span aria-hidden="true">⇩</span>
       </button>
       {message && <div className={message.error ? 'backup-message error' : 'backup-message'} role="status">{message.text}</div>}
-      <input ref={marketInput} type="file" hidden accept=".json,.xlsx,.xls,.xlsm,.csv,.tsv,.txt,.xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importMarketFile(file); }} />
+      <input ref={marketInput} type="file" hidden accept=".json,.xlsx,.xls,.xlsm,.xlsb,.csv,.tsv,.txt,.xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importMarketFile(file); }} />
       <input ref={drawingsInput} type="file" hidden accept=".json,.txt,application/json,text/plain" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importDrawingsFile(file); }} />
 
       {dialog && (
