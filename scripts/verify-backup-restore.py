@@ -43,6 +43,19 @@ with sync_playwright() as p:
     page.locator(".topbar select").select_option("BBSY")
     page.wait_for_function("window.__tradingpro?.service.getState().status === 'ready' && window.__tradingpro.service.candles.length > 0", timeout=10000)
 
+    # Export both datasets together and validate the combined backup.
+    page.get_by_role("button", name="تصدير البيانات").click()
+    with page.expect_download() as full_download:
+        page.get_by_role("button", name="تصدير", exact=True).click()
+    full_file = full_download.value
+    full_path = "/tmp/" + full_file.suggested_filename
+    full_file.save_as(full_path)
+    with open(full_path, encoding="utf-8") as stream: full_backup = json.load(stream)
+    check("combined export includes market and drawing datasets",
+          full_backup.get("format") == "tradingpro-complete-backup" and
+          full_backup.get("marketData", {}).get("format") == "tradingpro-market-database" and
+          full_backup.get("drawings", {}).get("format") == "tradingpro-drawings")
+
     # Export only drawings and check the generated file's self-describing format.
     page.get_by_role("button", name="تصدير البيانات").click()
     switches = page.get_by_role("switch")
