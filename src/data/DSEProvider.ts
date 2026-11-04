@@ -190,16 +190,10 @@ export class DSEProvider implements MarketDataProvider {
       const supplied = incoming[item.symbol];
       if (supplied === undefined) continue;
       const current = mode === 'update' ? (this.#readCachedDaily(item.symbol) ?? []) : [];
-      const dates = new Set(current.map((row) => row.date));
-      const merged = [...current];
-      for (const row of supplied) {
-        if (dates.has(row.date)) { kept++; continue; }
-        dates.add(row.date);
-        merged.push(row);
-        added++;
-      }
-      merged.sort((a, b) => a.date.localeCompare(b.date));
-      this.#writeCachedDaily(item.symbol, merged);
+      const merged = mergeDailyRows(current, supplied);
+      added += merged.added;
+      kept += merged.kept;
+      this.#writeCachedDaily(item.symbol, merged.rows);
       touched.push(item.symbol);
     }
     return { added, kept, symbols: touched };
