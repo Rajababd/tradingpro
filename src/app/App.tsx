@@ -10,6 +10,7 @@ import { createSeriesStyles } from '../indicators/seriesStyles';
 import type { Timeframe } from '../types/marketData';
 import { CrosshairLegend } from '../ui/CrosshairLegend';
 import { DrawingToolbar } from '../ui/DrawingToolbar';
+import { BackupRestorePanel } from '../ui/BackupRestorePanel';
 import { describeFeed, describeHistory } from '../ui/feedStatus';
 import { TopBarMenus } from '../ui/TopBarMenus';
 import { useMarketDataState } from '../ui/useMarketDataState';
@@ -172,8 +173,17 @@ export function App() {
         </div>
       </header>
       <main className="workspace">
-        <aside className="side-toolbar" aria-label="Drawing tools">
+        <aside className="side-toolbar" aria-label="Drawing and data tools">
           <DrawingToolbar controller={session?.chart.drawings ?? null} />
+          <BackupRestorePanel
+            provider={provider}
+            controller={session?.chart.drawings ?? null}
+            symbol={symbol}
+            timeframe={timeframe}
+            onMarketDataImported={async () => {
+              if (session) await session.service.load({ symbol, timeframe, limit: config.initialBars });
+            }}
+          />
         </aside>
         <section className="chart-area">
           <div ref={containerRef} className="chart" data-testid="chart" />
