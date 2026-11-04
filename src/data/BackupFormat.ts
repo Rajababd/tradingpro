@@ -90,7 +90,8 @@ function validateDrawingItems(value: unknown[]): DrawingJSON[] {
         typeof item.type !== 'string' || !Number.isInteger(item.paneIndex) || (item.paneIndex as number) < 0 ||
         !Array.isArray(item.anchors) || item.anchors.some((anchor) => !record(anchor) ||
           !(typeof anchor.time === 'string' || finite(anchor.time)) || !finite(anchor.price) ||
-          (anchor.logical !== undefined && !finite(anchor.logical))) ||
+          (anchor.logical !== undefined && !finite(anchor.logical)) ||
+          (anchor.logicalOffset !== undefined && !finite(anchor.logicalOffset))) ||
         (item.seriesId !== undefined && typeof item.seriesId !== 'string') ||
         (item.style !== undefined && !record(item.style)) || (item.options !== undefined && !record(item.options))) {
       throw new Error('يحتوي ملف الرسومات على رسم غير صالح.');
