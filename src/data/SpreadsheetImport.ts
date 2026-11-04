@@ -3,7 +3,7 @@ import { DSE_SYMBOLS } from './DSEProvider';
 
 export type ImportedMarketRows = Record<string, BackupCandle[]>;
 
-const SYMBOLS = new Set(DSE_SYMBOLS.map((item) => item.symbol));
+const SYMBOLS = new Set<string>(DSE_SYMBOLS.map((item) => item.symbol));
 const aliases: Record<string, string[]> = {
   symbol: ['symbol', 'ticker', 'code', 'الرمز', 'السهم'],
   date: ['date', 'tradingdate', 'trading_date', 'timestamp', 'التاريخ', 'تاريخ'],
