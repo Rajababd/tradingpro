@@ -13,6 +13,18 @@ export const DSE_SYMBOLS = [
 type DseSymbol = (typeof DSE_SYMBOLS)[number];
 type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null; corrected?: boolean };
 
+export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly DailyRow[]): { rows: DailyRow[]; added: number; kept: number } {
+  const byDate = new Map(existing.map((row) => [row.date, row]));
+  let added = 0;
+  let kept = 0;
+  for (const row of incoming) {
+    if (byDate.has(row.date)) { kept++; continue; }
+    byDate.set(row.date, row);
+    added++;
+  }
+  return { rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)), added, kept };
+}
+
 const numberOrNull = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
