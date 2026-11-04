@@ -112,7 +112,7 @@ function parseDelimited(text: string, delimiter: string): unknown[][] {
   row.push(cell); if (row.some((v) => v.trim())) rows.push(row);
   return rows;
 }
-function parseWorkbook(buffer: ArrayBuffer): ImportedMarketRows {
+export function parseWorkbookBuffer(buffer: ArrayBuffer): ImportedMarketRows {
   let workbook: XLSX.WorkBook;
   try {
     workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: true });
@@ -138,7 +138,7 @@ export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> 
     return parseTabularRows(parseDelimited(text, delimiter));
   }
   if (['xlsx', 'xlsm', 'xls', 'xlsb'].includes(extension ?? '')) {
-    return parseWorkbook(await file.arrayBuffer());
+    return parseWorkbookBuffer(await file.arrayBuffer());
   }
   if (extension === 'xml') {
     const text = await file.text();
