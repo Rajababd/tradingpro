@@ -19,6 +19,13 @@ describe('portable backup formats', () => {
     })).toThrow(/تاريخ مكرر/);
   });
 
+  it('rejects an empty market database so replace cannot wipe existing candles', () => {
+    expect(() => validateMarketDatabase({
+      format: 'tradingpro-market-database', version: 1,
+      symbols: { DWX: [], AVOC: [], ABC: [], BBSY: [], NIB: [], AHT: [] },
+    })).toThrow(/شموع صالحة/);
+  });
+
   it('validates drawing groups by symbol, timeframe and drawing structure', () => {
     const backup = validateDrawingBackup({
       format: 'tradingpro-drawings', version: 1, drawings: [{
