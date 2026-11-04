@@ -23,7 +23,7 @@ function downloadJson(filename: string, data: unknown) {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function BackupRestorePanel({ provider, controller, symbol, timeframe, onMarketDataImported }: Props) {
@@ -50,7 +50,15 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
       });
     }
     if (exportDrawings) {
-      downloadJson(`tradingpro-drawings-${stamp}.json`, exportDrawingDatabase(window.localStorage));
+      const backup = exportDrawingDatabase(window.localStorage);
+      // Include the active chart's latest state even before its debounce persistence completes.
+      if (controller !== null) {
+        const items = controller.export();
+        const active = backup.drawings.find((group) => group.symbol === symbol && group.timeframe === timeframe);
+        if (active) active.items = items;
+        else backup.drawings.push({ symbol, timeframe, items });
+      }
+      downloadJson(`tradingpro-drawings-${stamp}.json`, backup);
     }
     setDialog(null);
     setMessage({ text: 'تم تجهيز ملفات التصدير. احفظها في مكان آمن خارج التطبيق.', error: false });
