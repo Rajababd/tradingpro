@@ -15,7 +15,7 @@ export interface DrawingInstance {
   type: string;
   seriesId: string | null;
   paneIndex: number;
-  anchors: Array<{ time: number | string; logical?: number; price: number }>;
+  anchors: Array<{ time: number | string; logical?: number; logicalOffset?: number; price: number }>;
   options: { visible: boolean; locked: boolean; [key: string]: unknown };
   getSeries(): ISeriesApi<SeriesType> | null;
   isAttached(): boolean;
@@ -62,7 +62,7 @@ export interface DrawingToolRegistry {
   createDrawing(
     type: string,
     id: string,
-    anchors?: Array<{ time: number | string; logical?: number; price: number }>,
+    anchors?: Array<{ time: number | string; logical?: number; logicalOffset?: number; price: number }>,
     style?: Record<string, unknown>,
     options?: Record<string, unknown>,
   ): DrawingInstance | null;
