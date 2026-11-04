@@ -79,21 +79,6 @@ export function parseTabularRows(rows: unknown[][], sheetName?: string): Importe
   addRows(out, records, sheetSymbol && isKnownSymbol(sheetSymbol) ? sheetSymbol : undefined);
   return out;
 }
-export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> {
-  const extension = file.name.toLowerCase().split('.').pop();
-  if (extension === 'csv' || extension === 'tsv' || extension === 'txt') {
-    const text = await file.text();
-    const delimiter = extension === 'tsv' ? '\t' : (text.split('\n', 1)[0]?.includes(';') ? ';' : ',');
-    return parseTabularRows(parseDelimited(text, delimiter));
-  }
-  if (extension === 'xlsx' || extension === 'xlsm') return parseXlsx(await file.arrayBuffer());
-  if (extension === 'xls' || extension === 'xml') {
-    const text = await file.text();
-    if (text.trimStart().startsWith('<')) return parseSpreadsheetXml(text);
-    throw new Error('ملفات Excel الثنائية القديمة بصيغة .xls غير مدعومة حالياً. افتح الملف في Excel واحفظه بصيغة .xlsx أو CSV.');
-  }
-  throw new Error('صيغة الملف غير مدعومة. استخدم JSON أو XLSX أو XLS أو CSV.');
-}
 function parseDelimited(text: string, delimiter: string): unknown[][] {
   const rows: unknown[][] = [];
   let row: string[] = [], cell = '', quoted = false;
