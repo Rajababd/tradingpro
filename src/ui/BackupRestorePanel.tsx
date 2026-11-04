@@ -1,4 +1,7 @@
 import { useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import type { DrawingController } from '../chart/DrawingController';
 import { drawingStorageKey, saveDrawings } from '../chart/DrawingStorage';
 import type { Timeframe } from '../types/marketData';
@@ -18,17 +21,28 @@ type Props = {
 
 async function downloadJson(filename: string, data: unknown): Promise<'shared' | 'downloaded'> {
   const content = JSON.stringify(data, null, 2);
-  const file = new File([content], filename, { type: 'application/json;charset=utf-8' });
-  // Native Android WebViews may not implement the browser download listener.
-  // Web Share exposes the file to Android's system chooser (including Save to Files/Drive).
-  if (typeof navigator.share === 'function') {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return 'shared';
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error;
-      // Unsupported file sharing falls back to the standard browser download below.
+  if (Capacitor.isNativePlatform()) {
+    // Android WebView does not implement the Web Share API or a default download listener.
+    // Write the JSON into the app cache, then hand its native file URI to Android's share sheet.
+    const bytes = new TextEncoder().encode(content);
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
     }
+    const saved = await Filesystem.writeFile({
+      path: filename,
+      data: btoa(binary),
+      directory: Directory.Cache,
+      recursive: true,
+    });
+    const capability = await Share.canShare();
+    if (!capability.value) throw new Error('مشاركة الملفات غير متاحة على هذا الجهاز.');
+    await Share.share({
+      title: filename,
+      dialogTitle: 'تصدير نسخة TradingPro الاحتياطية',
+      files: [saved.uri],
+    });
+    return 'shared';
   }
   const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
