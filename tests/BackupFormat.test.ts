@@ -47,7 +47,7 @@ describe('portable backup formats', () => {
     expect(namedSheet.ABC).toHaveLength(1);
   });
 
-  it.each(['xls', 'xlsx', 'xlsm'] as const)('imports %s workbooks with date cells and symbol-named sheets', (bookType) => {
+  it.each(['xls', 'xlsx', 'xlsm', 'xlsb'] as const)('imports %s workbooks with date cells and symbol-named sheets', (bookType) => {
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet([
       ['Date', 'Open', 'High', 'Low', 'Close', 'Volume Traded', 'Value Traded'],
