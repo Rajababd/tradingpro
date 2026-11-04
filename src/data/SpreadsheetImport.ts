@@ -82,12 +82,10 @@ export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> 
     const delimiter = extension === 'tsv' ? '\t' : (text.split('\n', 1)[0]?.includes(';') ? ';' : ',');
     return parseTabularRows(parseDelimited(text, delimiter));
   }
-  if (extension === 'xlsx' || extension === 'xlsm') return parseXlsx(await file.arrayBuffer());
-  if (extension === 'xls' || extension === 'xml') {
-    const text = await file.text();
-    if (text.trimStart().startsWith('<')) return parseSpreadsheetXml(text);
-    throw new Error('ملفات Excel الثنائية القديمة بصيغة .xls غير مدعومة حالياً. افتح الملف في Excel واحفظه بصيغة .xlsx أو CSV.');
+  if (['xls', 'xlsx', 'xlsm', 'xlsb'].includes(extension ?? '')) {
+    return parseExcelBuffer(await file.arrayBuffer());
   }
+  if (extension === 'xml') return parseSpreadsheetXml(await file.text());
   throw new Error('صيغة الملف غير مدعومة. استخدم JSON أو XLSX أو XLS أو CSV.');
 }
 function parseDelimited(text: string, delimiter: string): unknown[][] {
@@ -108,79 +106,23 @@ function parseDelimited(text: string, delimiter: string): unknown[][] {
   row.push(cell); if (row.some((v) => v.trim())) rows.push(row);
   return rows;
 }
-async function unzip(buffer: ArrayBuffer): Promise<Map<string, Uint8Array>> {
-  const bytes = new Uint8Array(buffer), view = new DataView(buffer);
-  let eocd = -1;
-  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65558); i--) {
-    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw new Error('ملف XLSX ليس أرشيفاً صالحاً.');
-  const count = view.getUint16(eocd + 10, true), central = view.getUint32(eocd + 16, true);
-  const files = new Map<string, Uint8Array>();
-  let offset = central;
-  for (let i = 0; i < count; i++) {
-    if (view.getUint32(offset, true) !== 0x02014b50) throw new Error('بنية XLSX غير صالحة.');
-    const method = view.getUint16(offset + 10, true), compressed = view.getUint32(offset + 20, true);
-    const nameLen = view.getUint16(offset + 28, true), extraLen = view.getUint16(offset + 30, true);
-    const commentLen = view.getUint16(offset + 32, true), local = view.getUint32(offset + 42, true);
-    const name = new TextDecoder().decode(bytes.slice(offset + 46, offset + 46 + nameLen));
-    const localName = view.getUint16(local + 26, true), localExtra = view.getUint16(local + 28, true);
-    const start = local + 30 + localName + localExtra;
-    const compressedBytes = bytes.slice(start, start + compressed);
-    let data: Uint8Array;
-    if (method === 0) data = compressedBytes;
-    else if (method === 8) {
-      const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-      data = new Uint8Array(await new Response(stream).arrayBuffer());
-    } else throw new Error('طريقة ضغط XLSX غير مدعومة.');
-    files.set(name, data);
-    offset += 46 + nameLen + extraLen + commentLen;
-  }
-  return files;
-}
-function xml(files: Map<string, Uint8Array>, path: string): Document {
-  const bytes = files.get(path);
-  if (!bytes) throw new Error('ملف XLSX لا يحتوي على ' + path);
-  const doc = new DOMParser().parseFromString(new TextDecoder().decode(bytes), 'application/xml');
-  if (doc.querySelector('parsererror')) throw new Error('تعذر قراءة بنية XML داخل ملف XLSX.');
-  return doc;
-}
-function colIndex(ref: string): number {
-  let n = 0;
-  for (const c of ref.replace(/[0-9]/g, '')) n = n * 26 + c.charCodeAt(0) - 64;
-  return n - 1;
-}
-async function parseXlsx(buffer: ArrayBuffer): Promise<ImportedMarketRows> {
-  const files = await unzip(buffer);
-  const workbook = xml(files, 'xl/workbook.xml');
-  const rels = xml(files, 'xl/_rels/workbook.xml.rels');
-  const targets = new Map([...rels.querySelectorAll('Relationship')].map((r) => [r.getAttribute('Id')!, r.getAttribute('Target')!]));
-  const shared = files.has('xl/sharedStrings.xml')
-    ? [...xml(files, 'xl/sharedStrings.xml').querySelectorAll('si')].map((si) => [...si.querySelectorAll('t')].map((t) => t.textContent ?? '').join(''))
-    : [];
+/**
+ * Parse Excel workbooks with SheetJS. It handles both the modern ZIP/XML formats
+ * and legacy BIFF .xls files. Raw numeric date cells are intentionally preserved
+ * as Excel serial numbers so excelDate() can normalize them consistently.
+ */
+export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<ImportedMarketRows> {
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
   const out: ImportedMarketRows = {};
-  for (const sheet of [...workbook.querySelectorAll('sheets > sheet')]) {
-    const name = sheet.getAttribute('name') ?? '';
-    const relId = sheet.getAttribute('r:id') ?? '';
-    const target = targets.get(relId);
-    if (!target) continue;
-    const path = target.startsWith('/') ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
-    const doc = xml(files, path);
-    const rows: unknown[][] = [];
-    for (const row of [...doc.querySelectorAll('sheetData > row')]) {
-      const cells: unknown[] = [];
-      for (const cell of [...row.querySelectorAll(':scope > c')]) {
-        const index = colIndex(cell.getAttribute('r') ?? 'A1');
-        const type = cell.getAttribute('t');
-        const v = cell.querySelector('v')?.textContent ?? '';
-        let value: unknown = v;
-        if (type === 's') value = shared[Number(v)] ?? '';
-        else if (type === 'inlineStr') value = cell.querySelector('is t')?.textContent ?? '';
-        else if (type === 'b') value = v === '1';
-        cells[index] = value;
-      }
-      rows.push(cells);
-    }
+  for (const name of workbook.SheetNames) {
+    const sheet = workbook.Sheets[name];
+    if (!sheet) continue;
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: true,
+      defval: '',
+    }) as unknown[][];
     const parsed = parseTabularRows(rows, name);
     for (const [symbol, candles] of Object.entries(parsed)) (out[symbol] ??= []).push(...candles);
   }
