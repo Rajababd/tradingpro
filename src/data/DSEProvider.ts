@@ -301,10 +301,15 @@ export class DSEProvider implements MarketDataProvider {
         throw new Error(`DSE returned no usable OHLC rows for ${symbol}. Check the endpoint schema; close-only rows are not converted into invented candles.`);
       }
       const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
-      // Replace the cache only after a non-empty, parseable response is confirmed.
-      this.#writeCachedDaily(symbol, sortedDaily);
+      // A refresh is an additive update: dates already present remain untouched.
+      // This is intentionally identical to the "update data" import policy.
+      const existing = cached ?? [];
+      const knownDates = new Set(existing.map((row) => row.date));
+      const merged = [...existing, ...sortedDaily.filter((row) => !knownDates.has(row.date))]
+        .sort((a, b) => a.date.localeCompare(b.date));
+      this.#writeCachedDaily(symbol, merged);
       this.lastRefreshWarning = null;
-      return aggregateDaily(sortedDaily, timeframe);
+      return aggregateDaily(merged, timeframe);
     } catch (error) {
       if (signal?.aborted) throw error;
       if (refresh && cached !== null) {
