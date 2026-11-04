@@ -315,13 +315,11 @@ export class DSEProvider implements MarketDataProvider {
       const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
       // A refresh is an additive update: dates already present remain untouched.
       // This is intentionally identical to the "update data" import policy.
-      const existing = cached ?? [];
-      const knownDates = new Set(existing.map((row) => row.date));
-      const merged = [...existing, ...sortedDaily.filter((row) => !knownDates.has(row.date))]
-        .sort((a, b) => a.date.localeCompare(b.date));
-      this.#writeCachedDaily(symbol, merged);
+      // The top-bar refresh and file-import update share the same date-keyed merge policy.
+      const merged = mergeDailyRows(cached ?? [], sortedDaily);
+      this.#writeCachedDaily(symbol, merged.rows);
       this.lastRefreshWarning = null;
-      return aggregateDaily(merged, timeframe);
+      return aggregateDaily(merged.rows, timeframe);
     } catch (error) {
       if (signal?.aborted) throw error;
       if (refresh && cached !== null) {
