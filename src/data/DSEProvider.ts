@@ -165,31 +165,69 @@ export class DSEProvider implements MarketDataProvider {
     incoming: Record<string, DailyRow[]>,
     mode: 'update' | 'replace',
   ): { added: number; kept: number; symbols: string[] } {
+    let storage: Storage;
+    try { storage = window.localStorage; }
+    catch { throw new Error('تعذر الوصول إلى التخزين المحلي؛ لم يتم تغيير قاعدة البيانات.'); }
+
+    const previousRaw = new Map<string, string | null>();
+    try {
+      for (const item of DSE_SYMBOLS) previousRaw.set(item.symbol, storage.getItem(this.#cacheKey(item.symbol)));
+    } catch {
+      throw new Error('تعذر قراءة قاعدة البيانات الحالية؛ أُلغيت عملية الاستيراد دون تغيير البيانات.');
+    }
+    const previousMemory = new Map(this.#memoryCache);
+    const prepared = new Map<string, DailyRow[]>();
     let added = 0;
     let kept = 0;
     const touched: string[] = [];
-    if (mode === 'replace') {
-      for (const item of DSE_SYMBOLS) {
-        this.#memoryCache.delete(item.symbol);
-        try { window.localStorage.removeItem(this.#cacheKey(item.symbol)); } catch { /* storage may be unavailable */ }
-      }
-    }
+
+    // Prepare every symbol before writing anything, so validation/merge work is atomic.
     for (const item of DSE_SYMBOLS) {
       const supplied = incoming[item.symbol];
-      if (supplied === undefined) continue;
+      if (mode === 'update' && supplied === undefined) continue;
       const current = mode === 'update' ? (this.#readCachedDaily(item.symbol) ?? []) : [];
       const dates = new Set(current.map((row) => row.date));
       const merged = [...current];
-      for (const row of supplied) {
+      for (const row of supplied ?? []) {
         if (dates.has(row.date)) { kept++; continue; }
         dates.add(row.date);
         merged.push(row);
         added++;
       }
       merged.sort((a, b) => a.date.localeCompare(b.date));
-      this.#writeCachedDaily(item.symbol, merged);
+      prepared.set(item.symbol, merged);
       touched.push(item.symbol);
     }
+
+    try {
+      if (mode === 'replace') {
+        for (const item of DSE_SYMBOLS) storage.removeItem(this.#cacheKey(item.symbol));
+      }
+      for (const [symbol, rows] of prepared) {
+        const key = this.#cacheKey(symbol);
+        if (rows.length > 0) storage.setItem(key, JSON.stringify(rows));
+        else storage.removeItem(key);
+      }
+    } catch (error) {
+      // Roll back all persistent keys and the in-memory cache if any write fails.
+      let rollbackFailed = false;
+      for (const item of DSE_SYMBOLS) {
+        try {
+          const previous = previousRaw.get(item.symbol) ?? null;
+          if (previous === null) storage.removeItem(this.#cacheKey(item.symbol));
+          else storage.setItem(this.#cacheKey(item.symbol), previous);
+        } catch { rollbackFailed = true; }
+      }
+      this.#memoryCache.clear();
+      for (const [symbol, rows] of previousMemory) this.#memoryCache.set(symbol, rows);
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(rollbackFailed
+        ? `فشل حفظ قاعدة البيانات وتعذرت استعادة بعض مفاتيح التخزين. لا تغلق التطبيق؛ ${detail}`
+        : `فشل حفظ قاعدة البيانات المستوردة؛ أُلغيت العملية وأُعيدت البيانات السابقة. ${detail}`);
+    }
+
+    if (mode === 'replace') this.#memoryCache.clear();
+    for (const [symbol, rows] of prepared) this.#memoryCache.set(symbol, rows);
     return { added, kept, symbols: touched };
   }
 
