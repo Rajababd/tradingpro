@@ -25,12 +25,13 @@ export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly
       added++;
       continue;
     }
-    // Existing non-null values remain authoritative. Fill only fields that were
-    // unavailable in the stored candle, such as traded value in older imports.
+    // The date is the identity of a daily candle. Preserve all existing OHLC
+    // prices and any existing optional values; only fill nullable fields that
+    // are genuinely missing in storage. A null incoming field never erases data.
     const completed: DailyRow = {
       ...current,
-      volume: current.volume ?? row.volume,
-      valueTraded: current.valueTraded ?? row.valueTraded,
+      volume: current.volume === null ? row.volume : current.volume,
+      valueTraded: current.valueTraded === null ? row.valueTraded : current.valueTraded,
     };
     if (completed.volume !== current.volume || completed.valueTraded !== current.valueTraded) {
       byDate.set(row.date, completed);
