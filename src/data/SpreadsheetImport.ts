@@ -113,16 +113,104 @@ function parseDelimited(text: string, delimiter: string): unknown[][] {
  */
 export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<ImportedMarketRows> {
   const XLSX = await import('xlsx');
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
+  try {
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
+    const out: ImportedMarketRows = {};
+    for (const name of workbook.SheetNames) {
+      const sheet = workbook.Sheets[name];
+      if (!sheet) continue;
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        raw: true,
+        defval: '',
+      }) as unknown[][];
+      const parsed = parseTabularRows(rows, name);
+      for (const [symbol, candles] of Object.entries(parsed)) (out[symbol] ??= []).push(...candles);
+    }
+    if (Object.keys(out).length > 0) return out;
+  } catch {
+    // Fall back to the small OOXML reader for valid minimal workbooks lacking package metadata.
+  }
+  return parseMinimalXlsx(buffer);
+}
+
+async function unzipXlsx(buffer: ArrayBuffer): Promise<Map<string, Uint8Array>> {
+  const bytes = new Uint8Array(buffer), view = new DataView(buffer);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65558); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('ملف XLSX ليس أرشيفاً صالحاً.');
+  const count = view.getUint16(eocd + 10, true), central = view.getUint32(eocd + 16, true);
+  const files = new Map<string, Uint8Array>();
+  let offset = central;
+  for (let i = 0; i < count; i++) {
+    if (view.getUint32(offset, true) !== 0x02014b50) throw new Error('بنية XLSX غير صالحة.');
+    const method = view.getUint16(offset + 10, true), compressed = view.getUint32(offset + 20, true);
+    const nameLen = view.getUint16(offset + 28, true), extraLen = view.getUint16(offset + 30, true);
+    const commentLen = view.getUint16(offset + 32, true), local = view.getUint32(offset + 42, true);
+    const name = new TextDecoder().decode(bytes.slice(offset + 46, offset + 46 + nameLen));
+    const localName = view.getUint16(local + 26, true), localExtra = view.getUint16(local + 28, true);
+    const start = local + 30 + localName + localExtra;
+    const compressedBytes = bytes.slice(start, start + compressed);
+    let data: Uint8Array;
+    if (method === 0) data = compressedBytes;
+    else if (method === 8) {
+      const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      data = new Uint8Array(await new Response(stream).arrayBuffer());
+    } else throw new Error('طريقة ضغط XLSX غير مدعومة.');
+    files.set(name, data);
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return files;
+}
+
+function parseMinimalXlsxXml(files: Map<string, Uint8Array>, path: string): Document {
+  const bytes = files.get(path);
+  if (!bytes) throw new Error('ملف XLSX لا يحتوي على ' + path);
+  const doc = new DOMParser().parseFromString(new TextDecoder().decode(bytes), 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('تعذر قراءة بنية XML داخل ملف XLSX.');
+  return doc;
+}
+
+function excelColumnIndex(ref: string): number {
+  let n = 0;
+  for (const ch of ref.replace(/[0-9]/g, '')) n = n * 26 + ch.charCodeAt(0) - 64;
+  return n - 1;
+}
+
+async function parseMinimalXlsx(buffer: ArrayBuffer): Promise<ImportedMarketRows> {
+  const files = await unzipXlsx(buffer);
+  const workbook = parseMinimalXlsxXml(files, 'xl/workbook.xml');
+  const rels = parseMinimalXlsxXml(files, 'xl/_rels/workbook.xml.rels');
+  const targets = new Map([...rels.querySelectorAll('Relationship')].map((r) => [r.getAttribute('Id')!, r.getAttribute('Target')!]));
+  const shared = files.has('xl/sharedStrings.xml')
+    ? [...parseMinimalXlsxXml(files, 'xl/sharedStrings.xml').querySelectorAll('si')].map((si) =>
+        [...si.querySelectorAll('t')].map((t) => t.textContent ?? '').join(''))
+    : [];
   const out: ImportedMarketRows = {};
-  for (const name of workbook.SheetNames) {
-    const sheet = workbook.Sheets[name];
-    if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      raw: true,
-      defval: '',
-    }) as unknown[][];
+  for (const sheet of [...workbook.querySelectorAll('sheets > sheet')]) {
+    const name = sheet.getAttribute('name') ?? '';
+    const target = targets.get(sheet.getAttribute('r:id') ?? '');
+    if (!target) continue;
+    const path = target.startsWith('/') ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
+    const doc = parseMinimalXlsxXml(files, path);
+    const rows: unknown[][] = [];
+    for (const row of [...doc.querySelectorAll('sheetData > row')]) {
+      const cells: unknown[] = [];
+      for (const cell of [...row.querySelectorAll(':scope > c')]) {
+        const index = excelColumnIndex(cell.getAttribute('r') ?? 'A1');
+        const type = cell.getAttribute('t');
+        const v = cell.querySelector('v')?.textContent ?? '';
+        let value: unknown = v;
+        if (type === 's') value = shared[Number(v)] ?? '';
+        else if (type === 'inlineStr') value = cell.querySelector('is t')?.textContent ?? '';
+        else if (type === 'b') value = v === '1';
+        else if (v !== '' && (type === 'n' || type === null)) value = Number(v);
+        cells[index] = value;
+      }
+      rows.push(cells);
+    }
     const parsed = parseTabularRows(rows, name);
     for (const [symbol, candles] of Object.entries(parsed)) (out[symbol] ??= []).push(...candles);
   }
