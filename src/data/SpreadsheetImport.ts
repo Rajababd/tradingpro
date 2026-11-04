@@ -15,7 +15,7 @@ const aliases: Record<string, string[]> = {
   volume: ['volume', 'volume_traded', 'traded_volume', 'الحجم', 'الكمية', 'حجم التداول', 'كمية التداول'],
   valueTraded: ['valuetraded', 'value_traded', 'traded_value', 'turnover', 'قيمةالتداول'],
 };
-const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\s_\-]/g, '');
+const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\s_\-]/g, '').replace(/[\u0622\u0623\u0625]/g, 'ا');
 const fieldFor = (value: unknown) => Object.entries(aliases).find(([, names]) => names.some((name) => norm(name) === norm(value)))?.[0];
 
 function excelDate(value: unknown): string | null {
