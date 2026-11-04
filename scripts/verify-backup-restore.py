@@ -57,6 +57,7 @@ with sync_playwright() as p:
     check("drawing export is a versioned JSON file", drawing_export.get("format") == "tradingpro-drawings" and drawing_export.get("version") == 1)
 
     page.get_by_role("button", name="تصدير البيانات").click()
+    page.get_by_role("switch").nth(0).check()
     with page.expect_download() as market_download_info:
         page.get_by_role("button", name="تصدير", exact=True).click()
     market_download = market_download_info.value
