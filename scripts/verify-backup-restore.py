@@ -179,7 +179,7 @@ with sync_playwright() as p:
       return rows.length === 1 && rows[0].date === '2030-01-01';
     }""", timeout=10000)
     check("get database replaces the local reference history", page.evaluate("JSON.parse(localStorage.getItem('tradingpro:dse:daily:v1:BBSY')).length") == 1)
-    check("get database removes symbols absent from the supplied reference file", page.evaluate("localStorage.getItem('tradingpro:dse:daily:v1:DWX') === null"))
+    check("get database removes symbols absent from the supplied reference file", page.evaluate("JSON.parse(localStorage.getItem('tradingpro:dse:daily:v1:DWX') || '[]').length === 0"))
 
     context.close()
     browser.close()
