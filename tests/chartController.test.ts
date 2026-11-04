@@ -107,12 +107,12 @@ describe('ChartController', () => {
     expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
   });
 
-  it('shifts logical drawing anchors and viewport when older candles are prepended', () => {
+  it('rebases drawing anchors by timestamp and shifts the viewport when older candles are prepended', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
-    const shiftLogicalAnchors = vi.spyOn(c.drawings, 'shiftLogicalAnchors');
+    const rebaseLogicalAnchors = vi.spyOn(c.drawings, 'rebaseLogicalAnchors');
     c.prependCandles([candle(50), candle(100), candle(200)], 1);
-    expect(shiftLogicalAnchors).toHaveBeenCalledWith(1);
+    expect(rebaseLogicalAnchors).toHaveBeenCalledTimes(1);
     expect(mocks.timeScale.setVisibleLogicalRange).toHaveBeenCalledWith({ from: 2, to: 6 });
   });
 
