@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import type { DrawingController } from '../chart/DrawingController';
 import { drawingStorageKey, saveDrawings } from '../chart/DrawingStorage';
@@ -24,14 +24,10 @@ async function downloadJson(filename: string, data: unknown): Promise<'shared' |
   if (Capacitor.isNativePlatform()) {
     // Android WebView does not implement the Web Share API or a default download listener.
     // Write the JSON into the app cache, then hand its native file URI to Android's share sheet.
-    const bytes = new TextEncoder().encode(content);
-    let binary = '';
-    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    }
     const saved = await Filesystem.writeFile({
       path: filename,
-      data: btoa(binary),
+      data: content,
+      encoding: Encoding.UTF8,
       directory: Directory.Cache,
       recursive: true,
     });
