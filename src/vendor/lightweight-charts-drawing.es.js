@@ -250,7 +250,11 @@ class I {
   }
   pixelToAnchor(i, t) {
     const s = t.timeScale.coordinateToTime(i.x), e = t.priceScale.coordinateToPrice(i.y), n = t.timeScale.coordinateToLogical?.(i.x);
-    return s === null || e === null ? null : { time: s, ...(Number.isFinite(n) ? { logical: n } : {}), price: e };
+    if (s === null || e === null) return null;
+    const baseX = t.timeScale.timeToCoordinate?.(s);
+    const baseLogical = baseX === null || baseX === void 0 ? null : t.timeScale.coordinateToLogical?.(baseX);
+    const logicalOffset = Number.isFinite(n) && Number.isFinite(baseLogical) ? n - baseLogical : 0;
+    return { time: s, ...(Number.isFinite(n) ? { logical: n, logicalOffset } : {}), price: e };
   }
   getViewport() {
     if (!this._chart || !this._series) return null;
@@ -352,18 +356,32 @@ class Cr {
       console.warn(`Drawing with id ${i.id} already exists`);
       return;
     }
-    if (this._chart) {
-      const timeScale = this._chart.timeScale();
-      i.anchors = i.anchors.map((anchor) => {
-        if (Number.isFinite(anchor.logical)) return anchor;
-        const x = timeScale.timeToCoordinate(anchor.time);
-        const logical = x === null ? null : timeScale.coordinateToLogical(x);
-        return Number.isFinite(logical) ? { ...anchor, logical } : anchor;
-      });
-    }
     this._drawings.set(i.id, i);
     const s = t ? (e = this._seriesIdResolver) == null ? void 0 : e.call(this, t) : void 0;
-    s && i.setSeriesId(s), this._isAttached && this._chart && t && i.attach(t, this._chart, this._container ?? void 0), this.emit("drawing:added", { drawingId: i.id, drawing: i });
+    s && i.setSeriesId(s);
+    this.rebaseLogicalAnchors();
+    this._isAttached && this._chart && t && i.attach(t, this._chart, this._container ?? void 0);
+    this.emit("drawing:added", { drawingId: i.id, drawing: i });
+  }
+  /**
+   * Rebase persisted logical indices against the chart's current time scale.
+   * Time is the stable anchor; logicalOffset preserves sub-bar placement.
+   */
+  rebaseLogicalAnchors() {
+    if (!this._chart) return;
+    const timeScale = this._chart.timeScale();
+    const rebase = (anchor) => {
+      const x = timeScale.timeToCoordinate(anchor.time);
+      if (x === null || x === void 0) return anchor;
+      const baseLogical = timeScale.coordinateToLogical(x);
+      if (!Number.isFinite(baseLogical)) return anchor;
+      const offset = Number.isFinite(anchor.logicalOffset) ? anchor.logicalOffset : 0;
+      return { ...anchor, logical: baseLogical + offset, logicalOffset: offset };
+    };
+    for (const drawing of this._drawings.values()) {
+      drawing.anchors = drawing.anchors.map(rebase);
+    }
+    this._pendingAnchors = this._pendingAnchors.map(rebase);
   }
   /**
    * Remove a drawing by id
