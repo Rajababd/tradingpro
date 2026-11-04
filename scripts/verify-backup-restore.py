@@ -58,6 +58,7 @@ with sync_playwright() as p:
 
     page.get_by_role("button", name="تصدير البيانات").click()
     page.get_by_role("switch").nth(0).check()
+    page.get_by_role("switch").nth(1).uncheck()
     with page.expect_download() as market_download_info:
         page.get_by_role("button", name="تصدير", exact=True).click()
     market_download = market_download_info.value
