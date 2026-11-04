@@ -211,6 +211,28 @@ describe('DSEProvider', () => {
     expect(provider.exportDatabase().ABC).toHaveLength(1);
   });
 
+  it('rolls back a failed market-data import without losing the previous database', () => {
+    const storage = new Map<string, string>();
+    let rejectBBSYWrite = false;
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (rejectBBSYWrite && key.endsWith(':BBSY')) throw new Error('simulated storage quota error');
+        storage.set(key, value);
+      },
+      removeItem: (key: string) => { storage.delete(key); },
+    } });
+    const provider = new DSEProvider();
+    const original = { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000 };
+    provider.importDatabase({ BBSY: [original] }, 'replace');
+    rejectBBSYWrite = true;
+    expect(() => provider.importDatabase({ BBSY: [
+      { ...original, date: '2026-01-02', close: 12 },
+    ] }, 'update')).toThrow(/أُعيدت البيانات السابقة/);
+    rejectBBSYWrite = false;
+    expect(provider.exportDatabase().BBSY).toEqual([original]);
+  });
+
   it('keeps the previous cached history if an explicit refresh fails', async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('window', { localStorage: {
