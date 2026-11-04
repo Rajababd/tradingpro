@@ -100,7 +100,7 @@ function parseDelimited(text: string, delimiter: string): unknown[][] {
 export function parseWorkbookBuffer(buffer: ArrayBuffer): ImportedMarketRows {
   let workbook: XLSX.WorkBook;
   try {
-    workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: true });
+    workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
   } catch {
     throw new Error('تعذر قراءة ملف Excel. تأكد أن الملف غير تالف ومحفوظ بصيغة مدعومة.');
   }
