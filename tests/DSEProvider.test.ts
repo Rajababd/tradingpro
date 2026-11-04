@@ -217,7 +217,10 @@ describe('DSEProvider', () => {
     vi.stubGlobal('window', { localStorage: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => {
-        if (rejectBBSYWrite && key.endsWith(':BBSY')) throw new Error('simulated storage quota error');
+        if (rejectBBSYWrite && key.endsWith(':BBSY')) {
+          rejectBBSYWrite = false;
+          throw new Error('simulated storage quota error');
+        }
         storage.set(key, value);
       },
       removeItem: (key: string) => { storage.delete(key); },
