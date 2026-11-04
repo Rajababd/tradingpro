@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateDrawingBackup, validateMarketDatabase } from '../src/data/BackupFormat';
-import { parseTabularRows } from '../src/data/SpreadsheetImport';
+import { parseTabularRows, parseWorkbookBuffer } from '../src/data/SpreadsheetImport';
+import * as XLSX from 'xlsx';
 
 describe('portable backup formats', () => {
   it('validates and preserves the exported market database format', () => {
@@ -16,6 +17,13 @@ describe('portable backup formats', () => {
         { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: null, valueTraded: null },
       ] },
     })).toThrow(/تاريخ مكرر/);
+  });
+
+  it('rejects an empty market database so replace cannot wipe existing candles', () => {
+    expect(() => validateMarketDatabase({
+      format: 'tradingpro-market-database', version: 1,
+      symbols: { DWX: [], AVOC: [], ABC: [], BBSY: [], NIB: [], AHT: [] },
+    })).toThrow(/شموع صالحة/);
   });
 
   it('validates drawing groups by symbol, timeframe and drawing structure', () => {
@@ -44,5 +52,19 @@ describe('portable backup formats', () => {
       ['2026-01-02', 11, 13, 10, 12],
     ], 'ABC');
     expect(namedSheet.ABC).toHaveLength(1);
+  });
+
+  it.each(['xls', 'xlsx', 'xlsm', 'xlsb'] as const)('imports %s workbooks with date cells and symbol-named sheets', (bookType) => {
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['Date', 'Open', 'High', 'Low', 'Close', 'Volume Traded', 'Value Traded'],
+      [new Date('2026-03-17T00:00:00.000Z'), 10, 12, 9, 11, 120, 1320],
+    ]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'BBSY');
+    const bytes = XLSX.write(workbook, { bookType, type: 'array', cellDates: true }) as ArrayBuffer;
+    const imported = parseWorkbookBuffer(bytes);
+    expect(imported.BBSY).toEqual([{
+      date: '2026-03-17', open: 10, high: 12, low: 9, close: 11, volume: 120, valueTraded: 1320,
+    }]);
   });
 });

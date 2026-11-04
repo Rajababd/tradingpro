@@ -23,7 +23,8 @@
     "zod": "4.6.7",
     "zustand": "5.0.15",
     "@capacitor/filesystem": "8.0.0",
-    "@capacitor/share": "8.0.3"
+    "@capacitor/share": "8.0.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.0",

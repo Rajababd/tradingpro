@@ -53,7 +53,10 @@ export function validateMarketDatabase(value: unknown): MarketDatabaseBackup {
     }
     symbols[symbol] = (parsed as BackupCandle[]).sort((a, b) => a.date.localeCompare(b.date));
   }
-  if (Object.keys(symbols).length === 0) throw new Error('لا يحتوي الملف على بيانات لأي سهم معروف.');
+  const candleCount = Object.values(symbols).reduce((total, rows) => total + rows.length, 0);
+  if (Object.keys(symbols).length === 0 || candleCount === 0) {
+    throw new Error('لا يحتوي الملف على شموع صالحة لأي سهم معروف؛ لم يتم استبدال قاعدة البيانات الحالية.');
+  }
   return { format: 'tradingpro-market-database', version: BACKUP_VERSION,
     exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : new Date().toISOString(), symbols };
 }

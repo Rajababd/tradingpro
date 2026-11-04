@@ -228,4 +228,25 @@ describe('DSEProvider', () => {
     expect(provider.lastRefreshWarning).toMatch(/تعذّر تحديث BBSY/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('does not commit a partial reference import when persistent storage rejects a write', () => {
+    const storage = new Map<string, string>();
+    let failNextWrite = false;
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (failNextWrite) { failNextWrite = false; throw new Error('quota exceeded'); }
+        storage.set(key, value);
+      },
+    } });
+    const provider = new DSEProvider();
+    const original = { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: 5, valueTraded: 55 };
+    provider.importDatabase({ BBSY: [original] }, 'replace');
+    const before = provider.exportDatabase().BBSY;
+    failNextWrite = true;
+    expect(() => provider.importDatabase({ ABC: [{ ...original, date: '2026-02-01' }] }, 'replace'))
+      .toThrow(/لم يكتمل الاستيراد/);
+    expect(provider.exportDatabase().BBSY).toEqual(before);
+    expect(JSON.parse(storage.get('tradingpro:dse:daily:v1:BBSY') ?? '[]')).toEqual(before);
+  });
 });

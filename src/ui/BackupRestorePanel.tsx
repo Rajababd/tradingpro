@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import type { DrawingController } from '../chart/DrawingController';
 import { drawingStorageKey, saveDrawings } from '../chart/DrawingStorage';
@@ -16,7 +16,7 @@ type Props = {
   controller: DrawingController | null;
   symbol: string;
   timeframe: Timeframe;
-  onMarketDataImported: () => Promise<void>;
+  onMarketDataImported: (symbols: string[]) => Promise<void>;
 };
 
 async function downloadJson(filename: string, data: unknown): Promise<'shared' | 'downloaded'> {
@@ -24,14 +24,10 @@ async function downloadJson(filename: string, data: unknown): Promise<'shared' |
   if (Capacitor.isNativePlatform()) {
     // Android WebView does not implement the Web Share API or a default download listener.
     // Write the JSON into the app cache, then hand its native file URI to Android's share sheet.
-    const bytes = new TextEncoder().encode(content);
-    let binary = '';
-    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    }
     const saved = await Filesystem.writeFile({
       path: filename,
-      data: btoa(binary),
+      data: content,
+      encoding: Encoding.UTF8,
       directory: Directory.Cache,
       recursive: true,
     });
@@ -129,7 +125,7 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
         });
       }
       const result = provider.importDatabase(backup.symbols, marketMode);
-      await onMarketDataImported();
+      await onMarketDataImported(result.symbols);
       setDialog(null);
       setMessage({
         text: marketMode === 'update'
@@ -179,7 +175,7 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
         <span aria-hidden="true">⇩</span>
       </button>
       {message && <div className={message.error ? 'backup-message error' : 'backup-message'} role="status">{message.text}</div>}
-      <input ref={marketInput} type="file" hidden accept=".json,.xlsx,.xls,.xlsm,.csv,.tsv,.txt,.xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importMarketFile(file); }} />
+      <input ref={marketInput} type="file" hidden accept=".json,.xlsx,.xls,.xlsm,.xlsb,.csv,.tsv,.txt,.xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importMarketFile(file); }} />
       <input ref={drawingsInput} type="file" hidden accept=".json,.txt,application/json,text/plain" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importDrawingsFile(file); }} />
 
       {dialog && (

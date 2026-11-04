@@ -13,6 +13,18 @@ export const DSE_SYMBOLS = [
 type DseSymbol = (typeof DSE_SYMBOLS)[number];
 type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null; corrected?: boolean };
 
+export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly DailyRow[]): { rows: DailyRow[]; added: number; kept: number } {
+  const byDate = new Map(existing.map((row) => [row.date, row]));
+  let added = 0;
+  let kept = 0;
+  for (const row of incoming) {
+    if (byDate.has(row.date)) { kept++; continue; }
+    byDate.set(row.date, row);
+    added++;
+  }
+  return { rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)), added, kept };
+}
+
 const numberOrNull = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
@@ -165,32 +177,44 @@ export class DSEProvider implements MarketDataProvider {
     incoming: Record<string, DailyRow[]>,
     mode: 'update' | 'replace',
   ): { added: number; kept: number; symbols: string[] } {
-    let added = 0;
-    let kept = 0;
-    const touched: string[] = [];
-    if (mode === 'replace') {
-      for (const item of DSE_SYMBOLS) {
-        this.#memoryCache.delete(item.symbol);
-        try { window.localStorage.removeItem(this.#cacheKey(item.symbol)); } catch { /* storage may be unavailable */ }
-      }
-    }
-    for (const item of DSE_SYMBOLS) {
-      const supplied = incoming[item.symbol];
-      if (supplied === undefined) continue;
+    const touched = DSE_SYMBOLS.filter((item) => incoming[item.symbol] !== undefined);
+    const plans = (mode === 'replace' ? DSE_SYMBOLS : touched).map((item) => {
+      const supplied = incoming[item.symbol] ?? [];
       const current = mode === 'update' ? (this.#readCachedDaily(item.symbol) ?? []) : [];
-      const dates = new Set(current.map((row) => row.date));
-      const merged = [...current];
-      for (const row of supplied) {
-        if (dates.has(row.date)) { kept++; continue; }
-        dates.add(row.date);
-        merged.push(row);
-        added++;
-      }
-      merged.sort((a, b) => a.date.localeCompare(b.date));
-      this.#writeCachedDaily(item.symbol, merged);
-      touched.push(item.symbol);
+      const merged = mergeDailyRows(current, supplied);
+      return { symbol: item.symbol, rows: merged.rows, added: merged.added, kept: merged.kept };
+    });
+    const storage = window.localStorage;
+    const keys = mode === 'replace' ? DSE_SYMBOLS.map((item) => this.#cacheKey(item.symbol)) : plans.map((plan) => this.#cacheKey(plan.symbol));
+    const previous = new Map<string, string | null>();
+    try {
+      for (const key of keys) previous.set(key, storage.getItem(key));
+    } catch {
+      throw new Error('تعذر قراءة قاعدة البيانات المحلية؛ لم يتم استيراد أي بيانات.');
     }
-    return { added, kept, symbols: touched };
+    try {
+      for (const plan of plans) storage.setItem(this.#cacheKey(plan.symbol), JSON.stringify(plan.rows));
+      // Replace mode also writes empty arrays for symbols absent from the selected reference file.
+      if (mode === 'replace') {
+        const included = new Set(plans.map((plan) => plan.symbol));
+        for (const item of DSE_SYMBOLS) {
+          if (!included.has(item.symbol)) storage.setItem(this.#cacheKey(item.symbol), '[]');
+        }
+      }
+    } catch (error) {
+      for (const [key, value] of previous) {
+        try { storage.setItem(key, value ?? '[]'); } catch { /* best-effort rollback */ }
+      }
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`تعذر حفظ قاعدة البيانات المستوردة محلياً؛ لم يكتمل الاستيراد. ${detail}`);
+    }
+    if (mode === 'replace') this.#memoryCache.clear();
+    for (const plan of plans) this.#memoryCache.set(plan.symbol, plan.rows);
+    return {
+      added: plans.reduce((sum, plan) => sum + plan.added, 0),
+      kept: plans.reduce((sum, plan) => sum + plan.kept, 0),
+      symbols: touched.map((item) => item.symbol),
+    };
   }
 
   /** Refresh every configured symbol sequentially so later symbol changes can use local history. */
@@ -303,13 +327,11 @@ export class DSEProvider implements MarketDataProvider {
       const sortedDaily = daily.sort((a, b) => a.date.localeCompare(b.date));
       // A refresh is an additive update: dates already present remain untouched.
       // This is intentionally identical to the "update data" import policy.
-      const existing = cached ?? [];
-      const knownDates = new Set(existing.map((row) => row.date));
-      const merged = [...existing, ...sortedDaily.filter((row) => !knownDates.has(row.date))]
-        .sort((a, b) => a.date.localeCompare(b.date));
-      this.#writeCachedDaily(symbol, merged);
+      // The top-bar refresh and file-import update share the same date-keyed merge policy.
+      const merged = mergeDailyRows(cached ?? [], sortedDaily);
+      this.#writeCachedDaily(symbol, merged.rows);
       this.lastRefreshWarning = null;
-      return aggregateDaily(merged, timeframe);
+      return aggregateDaily(merged.rows, timeframe);
     } catch (error) {
       if (signal?.aborted) throw error;
       if (refresh && cached !== null) {
