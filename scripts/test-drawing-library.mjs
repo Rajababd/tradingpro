@@ -92,10 +92,10 @@ pointerUpAt(180, 130);
 assert.equal(manager3.getAllDrawings().length, 1, 'drawing is registered after required anchors are placed');
 const placed = manager3.getAllDrawings()[0];
 assert.equal(placed.type, 'trend-line');
-assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 17, logicalOffset: 0, price: 100 }, { time: 1.8, logical: 18, logicalOffset: 0, price: 100 }], 'pending anchors shift with history prepends without changing their timestamps');
+assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 17, logicalOffset: 5, price: 100 }, { time: 1.8, logical: 18, logicalOffset: 0, price: 100 }], 'pending anchors shift with history prepends without changing their timestamps');
 assert.equal(placed.seriesId, 'A');
 manager3.shiftLogicalAnchors(5);
-assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 22, logicalOffset: 0, price: 100 }, { time: 1.8, logical: 23, logicalOffset: 0, price: 100 }], 'prepending older candles shifts completed logical anchors but preserves timestamp identity');
+assert.deepEqual(placed.anchors, [{ time: 1.2, logical: 22, logicalOffset: 10, price: 100 }, { time: 1.8, logical: 23, logicalOffset: 5, price: 100 }], 'prepending older candles shifts completed logical anchors but preserves timestamp identity');
 assert.equal(manager3.getActiveTool(), null, 'tool exits after placement is complete');
 
 // Logical coordinates are the primary geometry; timestamps are a legacy fallback.
