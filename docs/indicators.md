@@ -60,8 +60,8 @@ Details worth knowing:
   `remove` is refused while an SMA reads from the instance.
 - Bad data fails loudly: an append that is not newer, an update to a different bar, or unsorted input throws `IndicatorSyncError`.
   `bindIndicatorsToService` catches that, logs it, and recomputes from the service's current candles, so the engine cannot stay wrong.
-- Calculation is independent of display: nothing here knows about series or panes, so hiding an indicator later cannot lose
-  its configuration or values.
+- Calculation is independent of display: the engine retains indicator/SMA instances, parameters and value columns while
+  outputs are not displayed. The chart series are removed on deactivation and recreated from the cached columns on activation.
 
 ## Validation
 - **Hand-calculated** examples in `tests/indicatorKernels.test.ts` (each worked out in a comment).
@@ -85,9 +85,9 @@ series and holds the user's settings. Spec section 8 distinguishes five states, 
 |---|---|
 | **available** | the registry (what exists) |
 | **configured** | parameters in the engine instance; each SMA's period in the workspace |
-| **initialised** | the chart series exist: created the first time something is shown, then only hidden and shown |
-| **displayed** | *derived* from the visibility controller (any output series visible); never stored, so the menus cannot disagree with the chart |
-| **cached** | calculations stay in the engine while hidden; hidden series keep receiving data, so showing one is instant and never stale |
+| **initialised** | calculation instances and output descriptors exist; chart series are materialized only while displayed |
+| **displayed** | *derived* from the visibility controller (an output series is currently materialized and visible); never stored separately |
+| **cached** | calculations stay in the engine while not displayed; a re-created series is filled from the latest complete engine column |
 
 - **Series ids:** indicator outputs are `<indicator>:<output>` (`rsi:rsi`, `macd:signal`); an SMA is `sma:<source key>` (`sma:price`,
   `sma:macd:signal`), with engine instance `sma-<source key>`. One SMA per source, with a stable identity; multiple SMAs per
@@ -95,7 +95,9 @@ series and holds the user's settings. Spec section 8 distinguishes five states, 
 - **Which pane:** an indicator goes in its own pane (MACD's three lines share one); **an SMA goes in its source's pane**, on the same
   scale (price SMA in the price pane, an indicator's SMA in that indicator's pane). An SMA on a source that is not displayed works:
   the source is calculated but not drawn, and its pane shows just the SMA (the row says "source not shown").
-- **Toggles:** an indicator's switch shows or hides all its outputs. A multi-output indicator also has per-line chips (Scenario B in the UI).
+- **Toggles:** an indicator's switch adds or removes all its output series. A multi-output indicator also has per-line chips (Scenario B in the UI).
+  Turning off the final series in a pane deletes that pane completely; turning it back on creates a fresh pane. Calculations and
+  settings remain cached. Drawings are detached from the removed series and reattached to its replacement by the same stable series id.
   Showing a source never switches its SMA on, and hiding it never switches its SMA off.
 - **Defaults:** nothing is displayed and no SMA is on at start (a clean chart); every SMA starts at period 20; Price is first in the SMA list.
 - **Source list:** the SMA menu is generated from `registry.smaSourceOptions()`: Price, then every eligible output.

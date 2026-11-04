@@ -60,6 +60,8 @@ export interface LoadRequest {
   readonly symbol: string;
   readonly timeframe: Timeframe;
   readonly limit?: number;
+  /** Bypass the provider cache only for a deliberate user refresh. */
+  readonly refresh?: boolean;
 }
 
 export interface MarketDataServiceOptions {

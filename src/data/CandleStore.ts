@@ -23,7 +23,7 @@ export interface PrependResult {
 }
 
 const sameValues = (a: Candle, b: Candle): boolean =>
-  a.open === b.open && a.high === b.high && a.low === b.low && a.close === b.close && a.volume === b.volume;
+  a.open === b.open && a.high === b.high && a.low === b.low && a.close === b.close && a.volume === b.volume && a.valueTraded === b.valueTraded;
 
 function assertStrictlyAscending(candles: readonly Candle[], what: string): void {
   for (let i = 1; i < candles.length; i++) {

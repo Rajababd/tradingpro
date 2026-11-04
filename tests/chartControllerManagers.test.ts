@@ -9,6 +9,8 @@ vi.mock('lightweight-charts', () => ({
   createChart: vi.fn(() => h.chart),
   CandlestickSeries: { type: 'Candlestick' },
   ColorType: { Solid: 'solid' },
+  CrosshairMode: { Normal: 0 },
+  TrackingModeExitMode: { OnTouchEnd: 0 },
 }));
 
 import { ChartController } from '../src/chart/ChartController';
@@ -47,7 +49,7 @@ describe('ChartController managers', () => {
     controller.mount(container);
     controller.mount(container); // idempotent
     controller.visibility.addSeries({ id: 'rsi', definition: def('Line'), paneId: 'rsi' });
-    expect(fake.panes).toHaveLength(2);
+    expect(fake.paneGroups).toHaveLength(2);
     expect(fake.addSeries).toHaveBeenCalledTimes(2);
   });
 

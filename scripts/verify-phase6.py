@@ -1,6 +1,8 @@
 """Phase 6 verification: drives the REAL app UI (menus, switches, fields) in Chromium and asserts on the real chart
 and engine through the development-only `window.__tradingpro` seam. Needs the dev server on :5173."""
 import sys
+import json
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 
 URL = "http://127.0.0.1:5173/"
@@ -24,12 +26,42 @@ window.__h = {
 """
 
 def new_page(browser, **ctx):
+    global requested_urls
     page = browser.new_context(locale="en-US", **ctx).new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "willReadFrequently" not in m.text else None)
+    # Mock the DSE historical endpoints for deterministic browser acceptance tests.
+    # Live endpoint access/CORS is a separate integration check.
+    daily_rows = []
+    start_date = date(2025, 1, 1)
+    for index in range(400):
+        opening = 100 + index
+        closing = opening + 0.5
+        daily_rows.append({
+            "date": (start_date + timedelta(days=index)).isoformat(),
+            "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
+            "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
+        })
+    requested_urls = []
+    def mock_dse(route):
+        requested_urls.append(route.request.url)
+        payload = daily_rows
+        if "symbol=DWX" in route.request.url:
+            payload = [{
+                "date": row["date"], "open_val": row["open"], "max_val": row["high"],
+                "min_val": row["low"], "close_val": row["close"],
+                "traded_volume": row["volume_traded"], "value_traded": row["value_traded"],
+            } for row in daily_rows]
+            payload = {"value_and_date": payload}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+    page.route("**/api/market-data**", mock_dse)
     page.goto(URL)
-    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=20000)
+    page.wait_for_timeout(200)
+    check("manual refresh: initial page load makes no market-data request", len(requested_urls) == 0, requested_urls)
+    page.get_by_role("button", name="تحديث البيانات").click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && {T}.service.candles.length >= 300", timeout=30000)
+    check("manual refresh: fetches each configured symbol once", len(requested_urls) == 6 and {url.split("symbol=")[-1] for url in requested_urls} == {"DWX", "AVOC", "ABC", "BBSY", "NIB", "AHT"}, requested_urls)
     page.evaluate(JS_HELPERS)
     page.wait_for_timeout(400)
     return page, errors
@@ -38,6 +70,55 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page, errors = new_page(browser, viewport={"width": 1280, "height": 800})
     ev = page.evaluate
+    # Compact shell acceptance: two 40px rows and a narrow left drawing rail.
+    shell = ev("""(() => {
+      const box = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return {x:r.x, right:r.right, width:r.width, height:r.height}; };
+      const buttons = [...document.querySelectorAll('.side-toolbar > .drawing-toolbar .drawing-tool-button')].map((el) => { const r = el.getBoundingClientRect(); return {w:r.width,h:r.height}; });
+      const backupButtons = [...document.querySelectorAll('.backup-tools .backup-action')].map((el) => el.getAttribute('aria-label'));
+      return {top:box('.topbar'), second:box('.toolbar-row'), rail:box('.side-toolbar'), chart:box('.chart-area'), buttons, backupButtons};
+    })()""")
+    check("compact shell: first top row is exactly 40px", abs(shell["top"]["height"] - 40) <= 0.5, shell)
+    check("compact shell: second top row is exactly 40px", abs(shell["second"]["height"] - 40) <= 0.5, shell)
+    check("compact shell: left drawing rail is narrow and sits beside the chart",
+          38 <= shell["rail"]["width"] <= 44 and abs(shell["chart"]["x"] - shell["rail"]["right"]) <= 1, shell)
+    check("compact shell: four remaining drawing controls are square icon buttons",
+          len(shell["buttons"]) == 4 and all(abs(b["w"] - b["h"]) <= 1 for b in shell["buttons"]), shell)
+    check("backup and restore controls appear below drawing tools in the side rail",
+          shell["backupButtons"] == ["تصدير البيانات", "استيراد البيانات"], shell)
+    check("compact shell: both top menus are visible inside the second row",
+          page.get_by_role("button", name="Indicators").is_visible() and page.get_by_role("button", name="SMA").is_visible(), shell)
+    check("compact shell: symbol selector and refresh action are visible in the first row",
+          page.locator(".topbar .market-select-label select").is_visible() and page.get_by_role("button", name="تحديث البيانات").is_visible(), shell)
+    # Price-axis width must grow when the visible labels gain digits, then shrink again.
+    base_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
+    original_candles = ev(f"{T}.service.candles")
+    ev(f"""{T}.chart.setCandles({T}.service.candles.map((c) => ({{
+      ...c, open: c.open * 10000, high: c.high * 10000, low: c.low * 10000, close: c.close * 10000
+    }})))""")
+    expanded_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
+    check("price scale expands when visible price labels become longer", expanded_price_scale_width > base_price_scale_width,
+          (base_price_scale_width, expanded_price_scale_width))
+    ev(f"{T}.chart.setCandles({T}.service.candles)")
+    restored_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
+    check("price scale contracts again when shorter labels return", restored_price_scale_width < expanded_price_scale_width,
+          (expanded_price_scale_width, restored_price_scale_width))
+    # Verify the new timeframe selector against the mocked historical daily source.
+    daily_count = ev(f"{T}.service.candles.length")
+    timeframe_buttons = page.locator(".timeframe-button")
+    check("DSE UI exposes daily, weekly and monthly display frames", timeframe_buttons.count() == 3)
+    page.get_by_role("button", name="أسبوعي", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'أسبوعي'", timeout=10000)
+    check("cached daily data: changing to weekly makes no network request", len(requested_urls) == 6, requested_urls)
+    weekly_count = ev(f"{T}.service.candles.length")
+    check("weekly frame aggregates daily source history into fewer candles", 0 < weekly_count < daily_count, (daily_count, weekly_count))
+    page.get_by_role("button", name="شهري", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'شهري'", timeout=10000)
+    check("cached daily data: changing to monthly makes no network request", len(requested_urls) == 6, requested_urls)
+    monthly_count = ev(f"{T}.service.candles.length")
+    check("monthly frame aggregates daily source history into fewer candles than weekly", 0 < monthly_count < weekly_count, (weekly_count, monthly_count))
+    page.get_by_role("button", name="يومي", exact=True).click()
+    page.wait_for_function(f"{T} && {T}.service.getState().status === 'ready' && document.querySelector('.timeframe-button[aria-pressed=true]')?.textContent === 'يومي' && {T}.service.candles.length >= 300", timeout=10000)
+    check("cached daily data: switching back to daily makes no network request", len(requested_urls) == 6, requested_urls)
     trig = lambda name: page.get_by_role("button", name=name, exact=False).filter(has_text=name).first
     open_menu = lambda name: (trig(name).click(), page.wait_for_selector(f"#menu-{ 'indicators' if name == 'Indicators' else 'sma' }", timeout=3000))
     row = lambda attr, key: page.locator(f"[{attr}='{key}']")
@@ -64,17 +145,20 @@ with sync_playwright() as p:
     check("M3 the menu stays open while toggling (several can be switched)", page.locator("#menu-indicators").count() == 1)
     ev(f"() => {{ window.__rsi = {T}.chart.series.get('rsi:rsi'); }}")
     check("M3 RSI data in the chart equals the engine's RSI, warm-up as gaps", ev(f"__h.close(__h.shown('rsi:rsi'), {T}.engine.values('rsi','rsi'))") and ev("__h.shown('rsi:rsi').slice(0, 14).every((v) => v === null)"))
+    ev(f"""() => {{ const times = {T}.engine.times; window.__paneDrawing = {T}.chart.drawings.create('trend-line', 'pane-rsi-persistence', 'rsi:rsi', [{{ time: times[30], price: 50 }}, {{ time: times[60], price: 60 }}]); }}""")
+    check("M3 a drawing on the RSI pane is initially attached", ev("window.__paneDrawing.isAttached()"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
-    check("M3 clicking again hides it: its pane collapses, nothing removed", ev("__h.paneRows()[1]") <= 3 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')"))
+    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.paneCount") == 1 and ev(f"{T}.chart.paneSeriesCounts") == [1] and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
     Hs = ev("__h.paneRows()")
-    check("M3 showing it again restores the pane to its earlier size", ev("__h.paneRows().length") == 2 and Hs[1] > 40, Hs)
+    check("M3 showing RSI again creates a fresh pane, restores cached values and reattaches its drawing", ev("__h.paneRows().length") == 2 and Hs[1] > 40 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"), Hs)
     for _ in range(24):
         switch("data-indicator", "rsi").click(); switch("data-indicator", "rsi").click()
     page.wait_for_timeout(200)
-    check("M4 after 25 real hide/show cycles: still ONE RSI series, the same object, same pane size",
-          ev(f"{T}.chart.series.list().filter((s) => s.id === 'rsi:rsi').length") == 1 and ev(f"{T}.chart.series.get('rsi:rsi') === window.__rsi") is True and abs(ev("__h.paneRows()[1]") - Hs[1]) <= 1)
+    check("M4 after 25 remove/recreate cycles: one RSI series and no leaked panes",
+          ev(f"{T}.chart.series.list().filter((s) => s.id === 'rsi:rsi').length") == 1 and ev(f"{T}.chart.series.get('rsi:rsi') !== window.__rsi") is True and ev("__h.paneRows().length") == 2)
     check("M4 ...and one calculation, correct data", ev(f"{T}.engine.list().length") == 1 and ev(f"__h.close(__h.shown('rsi:rsi'), {T}.engine.values('rsi','rsi'))"))
+    ev(f"() => {{ window.__rsi = {T}.chart.series.get('rsi:rsi'); }}")  # the currently materialized series after recreation
 
     # ---- M12: indicator settings
     page.get_by_role("button", name="RSI settings").click()
@@ -101,10 +185,10 @@ with sync_playwright() as p:
     macd_h = ev("__h.paneRows()[2]")
     check("B hiding two of three lines leaves the pane open at full size", macd_h > 40 and ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'macd').displayed"), macd_h)
     page.locator("[data-indicator='macd'] .chip", has_text="Histogram").click(); page.wait_for_timeout(120)
-    check("B hiding the last line collapses the pane and the indicator reads as not displayed", ev("__h.paneRows()[2]") <= 3 and not ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'macd').displayed"))
+    check("B removing the last line deletes the empty MACD pane and marks the indicator off", ev("__h.paneRows().length") == 2 and not ev(f"{T}.chart.series.has('macd:histogram')") and not ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'macd').displayed"))
     page.locator("[data-indicator='macd'] .chip", has_text="Signal").click(); page.wait_for_timeout(120)
-    check("B showing one line brings the pane back; the other two stay hidden",
-          ev("__h.paneRows()[2]") > 40 and ev(f"{T}.chart.series.get('macd:macd').options().visible") is False and ev(f"{T}.chart.series.get('macd:signal').options().visible") is not False)
+    check("B showing one line creates a fresh MACD pane; the other outputs stay absent",
+          ev("__h.paneRows().length") == 3 and not ev(f"{T}.chart.series.has('macd:macd')") and ev(f"{T}.chart.series.has('macd:signal')") and not ev(f"{T}.chart.series.has('macd:histogram')"))
     f_fast = page.locator("[data-indicator='macd'] .field input").first
     f_fast.fill("40"); f_fast.press("Enter"); page.wait_for_timeout(100)
     check("M12 MACD: fast not shorter than slow is refused with the reason", "shorter than the slow" in page.locator("[data-indicator='macd'] .error").first.inner_text() and ev(f"{T}.engine.get('macd').params.fast") == 12)
@@ -144,10 +228,10 @@ with sync_playwright() as p:
     f.fill("50"); f.press("Enter"); page.wait_for_timeout(200)
     check("M6 changing the period to 50 recalculates correctly, in the same series", ev(f"__h.close(__h.shown('sma:price'), __h.sma({T}.service.candles.map((c) => c.close), 50))") and ev(f"{T}.chart.series.get('sma:price') === window.__smaPrice") is True)
     switch("data-sma-source", "price").click(); page.wait_for_timeout(150)
-    check("M6 turning it off hides the line but keeps its calculation and its period",
-          ev(f"{T}.chart.series.get('sma:price').options().visible") is False and ev(f"{T}.engine.has('sma-price')") and f.input_value() == "50")
+    check("M6 turning it off removes the price SMA series but keeps its calculation and period",
+          not ev(f"{T}.chart.series.has('sma:price')") and ev(f"{T}.engine.has('sma-price')") and f.input_value() == "50")
     switch("data-sma-source", "price").click(); page.wait_for_timeout(150)
-    check("M6 turning it back on shows the same series with period 50 intact", ev(f"{T}.chart.series.get('sma:price') === window.__smaPrice") is True and f.input_value() == "50" and ev(f"{T}.chart.series.get('sma:price').options().visible") is not False)
+    check("M6 turning it back on recreates the SMA series with period 50 intact", ev(f"{T}.chart.series.get('sma:price') !== window.__smaPrice") is True and f.input_value() == "50" and ev(f"{T}.chart.series.has('sma:price')"))
     for _ in range(15):
         switch("data-sma-source", "price").click(); switch("data-sma-source", "price").click()
     check("M6 repeated toggling creates no duplicate series", ev(f"{T}.chart.series.list().filter((s) => s.id === 'sma:price').length") == 1)
@@ -180,7 +264,22 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     # ---- M10: live updates keep everything consistent
-    page.evaluate(f"() => {{ window.__appended0 = {T}.service.getState().stats.appended; }}")
+    # DSE supplies daily history rather than a rapid intraday stream. Inject one controlled
+    # live-feed event here so this acceptance test still verifies indicator synchronization
+    # on append without making the production DSE poll interval artificially short.
+    page.evaluate(f"""() => {{
+      const service = {T}.service;
+      window.__appended0 = service.getState().stats.appended;
+      service.stopLive();
+      service.startLive({{ intervalMs: 2000, feed: {{
+        start: (handlers) => {{ window.__emitDseTestCandle = handlers.onRecords; }},
+        stop: () => {{ delete window.__emitDseTestCandle; }}
+      }} }});
+      const last = service.candles.at(-1);
+      window.__emitDseTestCandle([{{ time: last.time + 86400, open: last.close,
+        high: last.close + 1, low: last.close - 1, close: last.close + 0.5,
+        volume: 1000, valueTraded: 5000 }}]);
+    }}""")
     page.wait_for_function(f"{T}.service.getState().stats.appended >= window.__appended0 + 1", timeout=30000)
     page.wait_for_timeout(300)
     ok = ev(f"""(() => {{
@@ -201,7 +300,34 @@ with sync_playwright() as p:
     page.mouse.move(pb["x"] + pb["width"] / 2, pb["y"] + 60); page.mouse.down(); page.mouse.move(pb["x"] + pb["width"] / 2 + 120, pb["y"] + 60, steps=6); page.mouse.up(); page.wait_for_timeout(200)
     r1 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging inside the open menu does not pan the chart", abs(r0["from"] - r1["from"]) < 1e-6 and page.locator("#menu-sma").count() == 1, (r0, r1))
-    page.mouse.move(box["x"] + box["width"] * 0.6, box["y"] + 200); page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.8, box["y"] + 200, steps=6); page.mouse.up(); page.wait_for_timeout(250)
+    # Use the chart's actual vertical midpoint: the new symbol/timeframe controls make the topbar taller,
+    # so a fixed y+200 coordinate can land outside the chart on some viewport sizes.
+    # Find a real chart-canvas point that is inside the chart but outside the floating panel/toolbar.
+    # This avoids depending on where the topbar places the menu at a given viewport size.
+    canvas_rects = page.locator("[data-testid=chart] canvas").evaluate_all(
+        "(els) => els.map((e) => { const r = e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }).filter((r) => r.width > 300 && r.height > 100).sort((a,b) => b.width*b.height-a.width*a.height)"
+    )
+    menu_rect = page.locator("#menu-sma").bounding_box()
+    drag_point = None
+    for canvas_rect in canvas_rects:
+        delta = min(canvas_rect["width"] * 0.18, 180)
+        for x_ratio in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7):
+            for y_ratio in (0.45, 0.65, 0.8):
+                px = canvas_rect["x"] + canvas_rect["width"] * x_ratio
+                py = canvas_rect["y"] + canvas_rect["height"] * y_ratio
+                path_left, path_right = sorted((px, px + delta))
+                path_hits_menu = menu_rect and path_right >= menu_rect["x"] and path_left <= menu_rect["x"] + menu_rect["width"] and menu_rect["y"] <= py <= menu_rect["y"] + menu_rect["height"]
+                if not path_hits_menu:
+                    drag_point = (px, py, canvas_rect, delta)
+                    break
+            if drag_point:
+                break
+        if drag_point:
+            break
+    check("M11 found an unobstructed chart canvas path for panning", drag_point is not None)
+    if drag_point:
+        px, py, canvas_rect, delta = drag_point
+        page.mouse.move(px, py); page.mouse.down(); page.mouse.move(px + delta, py, steps=10); page.mouse.up(); page.wait_for_timeout(250)
     r2 = ev(f"{T}.chart.viewport.getLogicalRange()")
     check("M11 dragging on the chart closes the menu AND pans the chart as normal", page.locator("#menu-sma").count() == 0 and abs(r2["from"] - r1["from"]) > 1, (r1, r2))
 
@@ -234,6 +360,71 @@ with sync_playwright() as p:
                             ("phone landscape 640x360", {"width": 640, "height": 360}, True), ("tablet 768x1024", {"width": 768, "height": 1024}, True)]:
         pg, errs = new_page(browser, viewport=vp, has_touch=touch, is_mobile=True, device_scale_factor=2)
         e2 = pg.evaluate
+        chart_box = pg.locator("[data-testid=chart]").bounding_box()
+        touch_x = chart_box["x"] + 137
+        touch_y = chart_box["y"] + 173
+        # Lightweight Charts owns the crosshair. Its mobile tracking mode is entered by a
+        # long press, follows the real touch coordinates in Normal mode, and exits on touchend.
+        pg.evaluate("""({x,y}) => {
+          const target = document.elementFromPoint(x, y);
+          const moves = [];
+          window.__touchCrosshairMoves = moves;
+          window.__touchCrosshairUnsubscribe = window.__tradingpro.chart.crosshair.subscribe((snapshot) => moves.push(snapshot));
+          const makeTouch = (px, py) => new Touch({
+            identifier: 77, target, clientX: px, clientY: py, pageX: px, pageY: py,
+            screenX: px, screenY: py, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
+          });
+          const rect = document.querySelector('[data-testid=chart]').getBoundingClientRect();
+          window.__touchCrosshairExpected = { x: x + 17.3, y: y + 23.7, localX: x + 17.3 - rect.left, localY: y + 23.7 - rect.top };
+          const start = makeTouch(x, y);
+          target.dispatchEvent(new TouchEvent('touchstart', {
+            bubbles: true, cancelable: true, touches: [start], targetTouches: [start], changedTouches: [start]
+          }));
+          window.__sendNativeTouchMove = (px, py) => {
+            const next = makeTouch(px, py);
+            target.dispatchEvent(new TouchEvent('touchmove', {
+              bubbles: true, cancelable: true, touches: [next], targetTouches: [next], changedTouches: [next]
+            }));
+          };
+          window.__sendNativeTouchEnd = () => target.dispatchEvent(new TouchEvent('touchend', {
+            bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [makeTouch(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y)]
+          }));
+          window.__sendNativeTouchTap = () => {
+            const tap = makeTouch(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y);
+            target.dispatchEvent(new TouchEvent('touchstart', {
+              bubbles: true, cancelable: true, touches: [tap], targetTouches: [tap], changedTouches: [tap]
+            }));
+            target.dispatchEvent(new TouchEvent('touchend', {
+              bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [tap]
+            }));
+          };
+        }""", {"x": touch_x, "y": touch_y})
+        pg.wait_for_timeout(650)  # native long-press threshold
+        pg.evaluate("() => window.__sendNativeTouchMove(window.__touchCrosshairExpected.x, window.__touchCrosshairExpected.y)")
+        pg.wait_for_timeout(100)
+        crosshair_state = e2("""(() => {
+          const moves = window.__touchCrosshairMoves;
+          const active = moves.filter((m) => m && m.logical !== null);
+          return {
+            customOverlayAbsent: document.querySelector('[data-testid=chart] .touch-crosshair') === null,
+            activeEvents: active.length,
+            pointMatchesFinger: active.some((m) => m.point && Math.abs(m.point.x - window.__touchCrosshairExpected.localX) < 2 && Math.abs(m.point.y - window.__touchCrosshairExpected.localY) < 2),
+            points: active.map((m) => m.point),
+            lastLogical: active.length ? active[active.length - 1].logical : null
+          };
+        })()""")
+        check(f"M15 {name}: Lightweight Charts native crosshair follows the exact touch point",
+              crosshair_state["customOverlayAbsent"] and crosshair_state["activeEvents"] > 0 and crosshair_state["pointMatchesFinger"],
+              crosshair_state)
+        pg.evaluate("() => window.__sendNativeTouchEnd()")
+        pg.wait_for_timeout(80)
+        retained = e2("() => window.__touchCrosshairMoves.at(-1)?.logical !== null")
+        check(f"M15 {name}: native crosshair remains active after the finger is lifted", retained)
+        pg.evaluate("() => window.__sendNativeTouchTap()")
+        pg.wait_for_timeout(80)
+        cleared = e2("() => window.__touchCrosshairMoves.at(-1)?.logical === null")
+        check(f"M15 {name}: native crosshair exits only after the next chart tap", cleared)
+        pg.evaluate("() => window.__touchCrosshairUnsubscribe?.()")
         for menu_name, mid in [("Indicators", "menu-indicators"), ("SMA", "menu-sma")]:
             tr = pg.get_by_role("button", name=menu_name).first
             tb = tr.bounding_box()

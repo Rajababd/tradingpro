@@ -4,11 +4,16 @@ import type { DrawingController } from '../chart/DrawingController';
 const TOOL_LABELS: Record<string, string> = {
   'trend-line': 'Trend line',
   'horizontal-line': 'Horizontal line',
-  rectangle: 'Rectangle',
   'fib-retracement': 'Fib retracement',
 };
 
-/** Minimal first-pass toolbar for interactive drawing placement on the price pane. */
+const TOOL_GLYPHS: Record<string, string> = {
+  'trend-line': '／',
+  'horizontal-line': '━',
+  'fib-retracement': '⌁',
+};
+
+/** Compact vertical drawing toolbar. Tool names remain available to assistive technology. */
 export function DrawingToolbar({ controller }: { controller: DrawingController | null }) {
   const [activeTool, setActiveTool] = useState<string | null>(null);
 
@@ -22,31 +27,36 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
     return unsubscribe;
   }, [controller]);
 
-  if (controller === null) return null;
-  const available = controller.tools.filter((tool) => tool.type in TOOL_LABELS);
+  const available = controller?.tools.filter((tool) => tool.type in TOOL_LABELS) ?? Object.keys(TOOL_LABELS).map((type) => ({
+    type,
+    requiredAnchors: type === 'horizontal-line' ? 1 : 2,
+  }));
 
   return (
     <div className="drawing-toolbar" role="group" aria-label="Drawing tools">
-      <span className="drawing-toolbar-label">Draw</span>
+      <span className="sr-only">Draw</span>
       {available.map((tool) => (
         <button
           key={tool.type}
           type="button"
           className="drawing-tool-button"
+          aria-label={TOOL_LABELS[tool.type]}
           aria-pressed={activeTool === tool.type}
+          disabled={controller === null}
           title={`${TOOL_LABELS[tool.type]} · ${tool.requiredAnchors} click${tool.requiredAnchors === 1 ? '' : 's'}`}
-          onClick={() => controller.setActiveTool(activeTool === tool.type ? null : tool.type)}
+          onClick={() => controller?.setActiveTool(activeTool === tool.type ? null : tool.type)}
         >
-          {TOOL_LABELS[tool.type]}
+          <span aria-hidden="true">{TOOL_GLYPHS[tool.type]}</span>
         </button>
       ))}
       {activeTool !== null && (
-        <button type="button" className="drawing-tool-button drawing-tool-cancel" onClick={() => controller.setActiveTool(null)}>
-          Cancel
+        <button type="button" className="drawing-tool-button drawing-tool-cancel" aria-label="Cancel drawing" title="Cancel drawing" disabled={controller === null} onClick={() => controller?.setActiveTool(null)}>
+          <span aria-hidden="true">×</span>
         </button>
       )}
-      <button type="button" className="drawing-tool-button" onClick={() => controller.clear()}>
-        Clear drawings
+      <span className="toolbar-divider" aria-hidden="true" />
+      <button type="button" className="drawing-tool-button" aria-label="Clear drawings" title="Clear drawings" disabled={controller === null} onClick={() => controller?.clear()}>
+        <span aria-hidden="true">⌫</span>
       </button>
     </div>
   );

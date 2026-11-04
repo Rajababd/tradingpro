@@ -11,7 +11,14 @@ type MenuName = 'indicators' | 'sma';
 export function TopBarMenus({ workspace }: { workspace: IndicatorWorkspace | null }) {
   const snapshot = useWorkspaceSnapshot(workspace);
   const [open, setOpen] = useState<MenuName | null>(null);
-  if (workspace === null) return null;
+  if (workspace === null) {
+    return (
+      <>
+        <button type="button" className="menu-trigger" disabled aria-disabled="true">Indicators <span aria-hidden="true">▾</span></button>
+        <button type="button" className="menu-trigger" disabled aria-disabled="true">SMA <span aria-hidden="true">▾</span></button>
+      </>
+    );
+  }
 
   const onOpenChange = (name: MenuName) => (isOpen: boolean) =>
     setOpen((current) => (isOpen ? name : current === name ? null : current));

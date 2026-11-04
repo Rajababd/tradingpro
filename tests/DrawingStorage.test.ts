@@ -4,7 +4,7 @@ import type { DrawingJSON } from '../src/vendor/lightweight-charts-drawing.es.js
 
 const sample: DrawingJSON[] = [{
   id: 'line-1',
-  type: 'TrendLine',
+  type: 'trend-line',
   seriesId: 'price',
   paneIndex: 0,
   anchors: [{ time: 1700000000, logical: 12, price: 42.5 }, { time: '2024-01-02', price: 45 }],

@@ -1,5 +1,7 @@
 """Browser-level smoke test for the drawing toolbar (requires Vite + Playwright Chromium)."""
 import sys
+import json
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 
 URL = "http://127.0.0.1:5173/"
@@ -17,9 +19,33 @@ with sync_playwright() as p:
         context = browser.new_context(viewport=viewport, is_mobile=(mode == "phone"),
                                      has_touch=(mode == "phone"))
         page = context.new_page()
+        # Keep the drawing acceptance test deterministic and independent of DSE CORS/network.
+        # The live DSE integration is verified separately against the real endpoints.
+        daily_rows = []
+        session_date = date(2025, 1, 1)
+        for index in range(400):
+            opening = 100 + index
+            closing = opening + 0.5
+            daily_rows.append({
+                "date": (session_date + timedelta(days=index)).isoformat(),
+                "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
+                "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
+            })
+        def mock_dse(route):
+            payload = daily_rows
+            if "symbol=DWX" in route.request.url:
+                payload = [{
+                    "date": row["date"], "open_val": row["open"], "max_val": row["high"],
+                    "min_val": row["low"], "close_val": row["close"],
+                    "traded_volume": row["volume_traded"], "value_traded": row["value_traded"],
+                } for row in daily_rows]
+                payload = {"value_and_date": payload}
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+        page.route("**/api/market-data**", mock_dse)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(URL)
+        page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
@@ -81,8 +107,84 @@ with sync_playwright() as p:
         if drawings:
             check(f"{mode}: drawing has two anchors", len(drawings[0].get("anchors", [])) == 2, str(drawings[0]))
             check(f"{mode}: drawing is attached to price series", drawings[0].get("seriesId") == "price", str(drawings[0].get("seriesId")))
+            persisted = page.evaluate("""() => {
+              const raw = localStorage.getItem('tradingpro:drawings:DWX:1D');
+              return raw ? JSON.parse(raw) : null;
+            }""")
+            saved_line = next((item for item in (persisted or {}).get("drawings", []) if item.get("id") == drawings[0]["id"]), None)
+            check(f"{mode}: trend line is synchronously saved with its registered type",
+                  saved_line is not None and saved_line.get("type") == "trend-line",
+                  str(saved_line))
         if drawing_committed:
             check(f"{mode}: tool exits after completion", button.get_attribute("aria-pressed") == "false")
+
+            # Select the trend line, then drag its first anchor. The drawing manager must
+            # intercept the anchor pointerdown in capture phase before the chart can pan.
+            page.evaluate("""() => {
+              window.__drawingSelectedId = null;
+              window.__drawingSelectUnsubscribe = window.__tradingpro.chart.drawings.on(
+                "drawing:selected", (event) => { window.__drawingSelectedId = event.drawingId; }
+              );
+            }""")
+            anchor_setup = page.evaluate("""({x, y}) => {
+              const drawing = window.__tradingpro.chart.drawings.export()[0];
+              return {
+                id: drawing.id, x, y,
+                range: window.__tradingpro.chart.viewport.getLogicalRange()
+              };
+            }""", {"x": p1[0], "y": p1[1]})
+            # A click on the anchor selects the drawing. The following pointer sequence edits it.
+            def dispatch_pointer(kind, x, y, pointer_type):
+                page.evaluate("""({kind, x, y, pointerType}) => {
+                  const target = document.elementFromPoint(x, y);
+                  target.dispatchEvent(new PointerEvent(kind, {
+                    bubbles: true, cancelable: true, pointerId: 91, pointerType,
+                    isPrimary: true, button: 0, buttons: kind === 'pointerup' ? 0 : 1,
+                    clientX: x, clientY: y
+                  }));
+                }""", {"kind": kind, "x": x, "y": y, "pointerType": "touch" if mode == "phone" else "mouse"})
+            dispatch_pointer("pointerdown", anchor_setup["x"], anchor_setup["y"], "touch" if mode == "phone" else "mouse")
+            dispatch_pointer("pointerup", anchor_setup["x"], anchor_setup["y"], "touch" if mode == "phone" else "mouse")
+            page.wait_for_timeout(100)
+            selected = page.evaluate("window.__drawingSelectedId")
+            check(f"{mode}: tapping a drawing anchor selects its drawing", selected == anchor_setup["id"], selected)
+            page.evaluate("""() => {
+              const root = document.querySelector('[data-testid="chart"]');
+              root.addEventListener('pointerdown', (event) => {
+                window.__anchorPointerPrevented = event.defaultPrevented;
+              }, true);
+              window.__anchorPointerPrevented = false;
+            }""")
+            start = (anchor_setup["x"], anchor_setup["y"])
+            finish = (anchor_setup["x"] + 35, anchor_setup["y"] + 12)
+            dispatch_pointer("pointerdown", *start, "touch" if mode == "phone" else "mouse")
+            dispatch_pointer("pointermove", *finish, "touch" if mode == "phone" else "mouse")
+            dispatch_pointer("pointerup", *finish, "touch" if mode == "phone" else "mouse")
+            page.wait_for_timeout(150)
+            anchor_result = page.evaluate("""(id) => {
+              const chart = window.__tradingpro.chart;
+              const drawing = chart.drawings.export().find((item) => item.id === id);
+              return {
+                anchor: drawing?.anchors[0],
+                range: chart.viewport.getLogicalRange(),
+                prevented: window.__anchorPointerPrevented
+              };
+            }""", anchor_setup["id"])
+            old_anchor = drawings[0]["anchors"][0]
+            anchor_moved = anchor_result["anchor"] and (
+                abs(float(anchor_result["anchor"].get("logical", 0)) - float(old_anchor.get("logical", 0))) > 0.1 or
+                abs(float(anchor_result["anchor"]["price"]) - float(old_anchor["price"])) > 0.01
+            )
+            range_stable = anchor_result["range"] and all(
+                abs(anchor_result["range"][key] - anchor_setup["range"][key]) < 1e-6
+                for key in ("from", "to")
+            )
+            check(f"{mode}: dragging an anchor is captured before chart gesture handling",
+                  anchor_result["prevented"], str(anchor_result))
+            check(f"{mode}: dragging an anchor moves the anchor itself", bool(anchor_moved), str(anchor_result["anchor"]))
+            check(f"{mode}: dragging an anchor does not pan the chart", bool(range_stable),
+                  (anchor_setup["range"], anchor_result["range"]))
+            page.evaluate("() => window.__drawingSelectUnsubscribe?.()")
 
         # Continue with a one-click tool even if the two-click tool failed; this distinguishes
         # a general click-dispatch problem from an anchor-count/second-click problem.
@@ -110,8 +212,11 @@ with sync_playwright() as p:
         check(f"{mode}: single-anchor tool commits on one click/tap", horizontal_committed and len(drawings) == (2 if drawing_committed else 1))
         if horizontal_committed and drawings:
             check(f"{mode}: single-anchor drawing has one anchor", len(drawings[-1].get("anchors", [])) == 1)
-        # Exercise the remaining two-anchor tools in the real UI as well.
-        for tool_name, tool_label in (("rectangle", "Rectangle"), ("fib-retracement", "Fib retracement")):
+        # Rectangle is intentionally no longer exposed; existing saved rectangles remain importable.
+        check(f"{mode}: Rectangle tool is absent from the drawing toolbar",
+              page.get_by_role("button", name="Rectangle").count() == 0)
+        # Exercise the remaining two-anchor tool in the real UI as well.
+        for tool_name, tool_label in (("fib-retracement", "Fib retracement"),):
             tool_button = page.get_by_role("button", name=tool_label)
             check(f"{mode}: {tool_label} tool is present", tool_button.count() == 1)
             if tool_button.count() != 1:
@@ -155,11 +260,54 @@ with sync_playwright() as p:
             if committed:
                 check(f"{mode}: {tool_label} exits after completion",
                       tool_button.get_attribute("aria-pressed") == "false")
+        # Place drawings on RSI as well as the price pane. The same active tool must
+        # resolve the pane under the touch/click and convert y to that pane's scale.
+        indicators_button = page.get_by_role("button", name="Indicators")
+        indicators_button.click()
+        page.locator("#menu-indicators [data-indicator='rsi'] .switch-row").click()
+        page.wait_for_function("window.__tradingpro.chart.series.has('rsi:rsi')", timeout=4000)
+        page.wait_for_function("""() => {
+          const pane = window.__tradingpro.chart.series.get('rsi:rsi').getPane();
+          return pane.getHTMLElement() !== null;
+        }""", timeout=4000)
+        rsi_rect = page.evaluate("""() => {
+          const pane = window.__tradingpro.chart.series.get('rsi:rsi').getPane();
+          const r = pane.getHTMLElement().getBoundingClientRect();
+          return {left:r.left, top:r.top, width:r.width, height:r.height};
+        }""")
+        page.keyboard.press("Escape")
+        rsi_p1 = (rsi_rect["left"] + rsi_rect["width"] * 0.42, rsi_rect["top"] + rsi_rect["height"] * 0.35)
+        rsi_p2 = (rsi_rect["left"] + rsi_rect["width"] * 0.67, rsi_rect["top"] + rsi_rect["height"] * 0.65)
+        button.click()
+        if mode == "desktop":
+            page.mouse.click(*rsi_p1); page.mouse.click(*rsi_p2)
+        else:
+            page.touchscreen.tap(*rsi_p1); page.touchscreen.tap(*rsi_p2)
+        page.wait_for_timeout(200)
+        rsi_line = next((item for item in export_drawings() if item.get("seriesId") == "rsi:rsi"), None)
+        check(f"{mode}: trend line can be created inside the RSI pane",
+              rsi_line is not None and len(rsi_line.get("anchors", [])) == 2, str(rsi_line))
+        # Horizontal line uses the same pane routing and must use RSI's own price scale.
+        horizontal.click()
+        rsi_h = (rsi_rect["left"] + rsi_rect["width"] * 0.56, rsi_rect["top"] + rsi_rect["height"] * 0.5)
+        if mode == "desktop": page.mouse.click(*rsi_h)
+        else: page.touchscreen.tap(*rsi_h)
+        page.wait_for_timeout(150)
+        rsi_horizontal = next((item for item in export_drawings() if item.get("type") == "horizontal-line" and item.get("seriesId") == "rsi:rsi"), None)
+        check(f"{mode}: horizontal line can be created inside the RSI pane",
+              rsi_horizontal is not None and len(rsi_horizontal.get("anchors", [])) == 1, str(rsi_horizontal))
+
         # Verify the autosaved drawings survive a full page reload.
         expected_drawings = export_drawings()
         page.wait_for_timeout(350)  # debounce window is 150 ms
         page.reload()
+        page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
+        # RSI drawings are restored as pending until the RSI pane/series is materialized.
+        page.get_by_role("button", name="Indicators").click()
+        page.locator("#menu-indicators [data-indicator='rsi'] .switch-row").click()
+        page.wait_for_function("window.__tradingpro.chart.series.has('rsi:rsi')", timeout=4000)
+        page.keyboard.press("Escape")
         try:
             page.wait_for_function(
                 "expected => window.__tradingpro.chart.drawings.export().length === expected",
@@ -185,6 +333,7 @@ with sync_playwright() as p:
             check(f"{mode}: clear drawings removes all drawings", len(export_drawings()) == 0)
             page.wait_for_timeout(350)  # allow the debounced empty state to be persisted
             page.reload()
+            page.get_by_role("button", name="تحديث البيانات").click()
             page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
             page.wait_for_timeout(400)  # allow asynchronous restoration to complete
             check(f"{mode}: cleared drawings stay cleared after reload", len(export_drawings()) == 0,

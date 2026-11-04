@@ -1,6 +1,8 @@
 import {
   CandlestickSeries,
   ColorType,
+  CrosshairMode,
+  TrackingModeExitMode,
   createChart,
   type CandlestickData,
   type IChartApi,
@@ -50,11 +52,64 @@ export class ChartController {
   #crosshair: CrosshairController | null = null;
   #drawings: DrawingController | null = null;
   #gestures: UserGestureTracker | null = null;
+  #priceScaleRangeHandler: (() => void) | null = null;
+  #priceScaleWidth = 64;
+  #priceCandles: Candle[] = [];
+
+  /** Current minimum width reserved for right-axis labels. */
+  get priceScaleMinimumWidth(): number {
+    return this.#priceScaleWidth;
+  }
+
+  /**
+   * Measure the longest formatted price in the visible candle range and reserve enough
+   * room for it. Re-evaluated after data changes and horizontal zoom/scroll.
+   */
+  #updatePriceScaleWidth(): void {
+    if (this.#chart === null || this.#series === null) return;
+    const data = this.#priceCandles;
+    if (data.length === 0) return;
+    const timeScale = this.#chart.timeScale();
+    const range = typeof timeScale.getVisibleLogicalRange === 'function' ? timeScale.getVisibleLogicalRange() : null;
+    const from = range === null ? 0 : Math.max(0, Math.floor(range.from));
+    const to = range === null ? data.length - 1 : Math.min(data.length - 1, Math.ceil(range.to));
+    const visible = data.slice(from, to + 1);
+    const formatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const labels = visible.flatMap((point) => [point.open, point.high, point.low, point.close]);
+    const longest = labels.reduce((best, value) => {
+      const label = formatter.format(value);
+      return label.length > best.length ? label : best;
+    }, '');
+    let measured = longest.length * 7.2;
+    if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (context !== null) {
+        context.font = '12px Arial, sans-serif';
+        measured = context.measureText(longest).width;
+      }
+    }
+    const nextWidth = Math.max(56, Math.min(132, Math.ceil(measured + 26)));
+    if (nextWidth === this.#priceScaleWidth) return;
+    this.#priceScaleWidth = nextWidth;
+    const priceScale = typeof this.#chart.priceScale === 'function' ? this.#chart.priceScale('right') : null;
+    priceScale?.applyOptions({ minimumWidth: nextWidth });
+  }
 
   constructor(private readonly theme: ChartTheme) {}
 
   get isMounted(): boolean {
     return this.#chart !== null;
+  }
+
+  /** Actual Lightweight Charts pane count, not inferred from DOM separators. */
+  get paneCount(): number {
+    return this.#chart?.panes().length ?? 0;
+  }
+
+  /** Number of real series in each actual chart pane, in visual order. */
+  get paneSeriesCounts(): readonly number[] {
+    return this.#chart?.panes().map((pane) => pane.getSeries().length) ?? [];
   }
 
   /** Read-only view of the chart's series. To add, hide, show or remove, use `visibility`. Available after mount. */
@@ -108,6 +163,8 @@ export class ChartController {
       grid: { vertLines: { color: t.rule }, horzLines: { color: t.rule } },
       rightPriceScale: { borderColor: t.rule },
       timeScale: { borderColor: t.rule },
+      crosshair: { mode: CrosshairMode.Normal },
+      trackingMode: { exitMode: TrackingModeExitMode.OnNextTap },
     });
 
     try {
@@ -130,10 +187,17 @@ export class ChartController {
       this.#panes = panes;
       this.#series = series;
       this.#gestures = new UserGestureTracker(container);
-      this.#viewport = new ViewportController(chart, this.#gestures);
+      this.#viewport = new ViewportController(chart, this.#gestures, chart.timeScale());
       this.#crosshair = new CrosshairController(chart, () =>
         series.get<'Candlestick'>(PRICE_SERIES_ID),
       );
+      const timeScale = chart.timeScale();
+      if (
+        typeof timeScale.subscribeVisibleLogicalRangeChange === 'function' &&
+        typeof timeScale.unsubscribeVisibleLogicalRangeChange === 'function'
+      ) {
+        this.#priceScaleRangeHandler = this.#viewport.subscribe(() => this.#updatePriceScaleWidth());
+      }
       this.#drawings = new DrawingController(series);
       this.#drawings.attach(chart, container);
     } catch (error) {
@@ -153,8 +217,10 @@ export class ChartController {
     if (this.#chart === null || this.#series === null || this.#viewport === null) {
       throw new Error('ChartController is not mounted.');
     }
+    this.#priceCandles = [...candles];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
     this.#viewport.fitContent();
+    this.#updatePriceScaleWidth();
   }
 
   /**
@@ -165,6 +231,10 @@ export class ChartController {
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).update(toCandlestickData(candle));
+    const last = this.#priceCandles.at(-1);
+    if (last?.time === candle.time) this.#priceCandles[this.#priceCandles.length - 1] = candle;
+    else this.#priceCandles.push(candle);
+    this.#updatePriceScaleWidth();
   }
 
   /**
@@ -176,11 +246,13 @@ export class ChartController {
   prependCandles(all: readonly Candle[], added: number): void {
     if (this.#series === null || this.#viewport === null || this.#drawings === null) throw new Error('ChartController is not mounted.');
     const range = this.#viewport.getLogicalRange();
+    this.#priceCandles = [...all];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
     if (added > 0) this.#drawings.shiftLogicalAnchors(added);
     if (range !== null && added > 0) {
       this.#viewport.setLogicalRange({ from: range.from + added, to: range.to + added });
     }
+    this.#updatePriceScaleWidth();
   }
 
   /** Idempotent. Safe before mount and after a previous dispose. */
@@ -188,6 +260,8 @@ export class ChartController {
     this.#disposed = true;
     if (this.#chart === null) return;
     // Detach library subscriptions before the chart is destroyed.
+    this.#priceScaleRangeHandler?.();
+    this.#priceScaleRangeHandler = null;
     this.#drawings?.dispose();
     this.#crosshair?.dispose();
     this.#viewport?.dispose();
@@ -204,6 +278,7 @@ export class ChartController {
     this.#crosshair = null;
     this.#drawings = null;
     this.#gestures = null;
+    this.#priceCandles = [];
   }
 
   #mounted<T>(value: T | null): T {

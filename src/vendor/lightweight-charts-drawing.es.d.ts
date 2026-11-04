@@ -32,6 +32,7 @@ export class DrawingManager {
     container: HTMLElement,
     seriesIdResolver?: (series: ISeriesApi<SeriesType>) => string | undefined,
     seriesResolverById?: (seriesId: string) => ISeriesApi<SeriesType> | undefined,
+    seriesResolverForPane?: (paneIndex: number) => ISeriesApi<SeriesType> | undefined,
   ): void;
   detach(): void;
   isAttached(): boolean;

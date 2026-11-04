@@ -10,16 +10,24 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:drawing": "node scripts/test-drawing-library.mjs",
-    "verify:drawing-app": "python scripts/verify-drawing-app.py"
+    "verify:drawing-app": "python scripts/verify-drawing-app.py",
+    "cap:sync": "cap sync android",
+    "android:debug": "cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
     "lightweight-charts": "5.2.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.7",
-    "zustand": "5.0.15"
+    "zustand": "5.0.15",
+    "@capacitor/filesystem": "8.0.0",
+    "@capacitor/share": "8.0.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.6.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
