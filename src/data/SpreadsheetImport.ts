@@ -8,11 +8,11 @@ const isKnownSymbol = (value: string): boolean => DSE_SYMBOLS.some((item) => ite
 const aliases: Record<string, string[]> = {
   symbol: ['symbol', 'ticker', 'code', 'الرمز', 'السهم'],
   date: ['date', 'tradingdate', 'trading_date', 'timestamp', 'التاريخ', 'تاريخ'],
-  open: ['open', 'openprice', 'open_val', 'الافتتاح', 'سعرالافتتاح'],
+  open: ['open', 'openprice', 'open_val', 'الافتتاح', 'افتتاح', 'إفتتاح', 'سعرالافتتاح', 'سعر الافتتاح'],
   high: ['high', 'max', 'max_val', 'الاعلى', 'أعلى', 'اعلى'],
   low: ['low', 'min', 'min_val', 'الادنى', 'أدنى', 'ادنى'],
   close: ['close', 'closeprice', 'close_val', 'السعر', 'الاغلاق', 'الإغلاق'],
-  volume: ['volume', 'volume_traded', 'traded_volume', 'الحجم', 'الكمية'],
+  volume: ['volume', 'volume_traded', 'traded_volume', 'الحجم', 'الكمية', 'حجم التداول', 'كمية التداول'],
   valueTraded: ['valuetraded', 'value_traded', 'traded_value', 'turnover', 'قيمةالتداول'],
 };
 const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\s_\-]/g, '');
@@ -70,13 +70,15 @@ function addRows(out: ImportedMarketRows, rows: Record<string, unknown>[], sheet
     (out[symbol] ??= []).push(candle);
   }
 }
-export function parseTabularRows(rows: unknown[][], sheetName?: string): ImportedMarketRows {
+export function parseTabularRows(rows: unknown[][], sheetName?: string, fallbackSymbol?: string): ImportedMarketRows {
   if (rows.length < 2) return {};
   const headers = rows[0]!.map((value) => String(value ?? '').trim());
   const records = rows.slice(1).map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index]])));
   const sheetSymbol = sheetName?.toUpperCase();
   const out: ImportedMarketRows = {};
-  addRows(out, records, sheetSymbol && isKnownSymbol(sheetSymbol) ? sheetSymbol : undefined);
+  const resolvedSymbol = sheetSymbol && isKnownSymbol(sheetSymbol) ? sheetSymbol :
+    (fallbackSymbol && isKnownSymbol(fallbackSymbol) ? fallbackSymbol : undefined);
+  addRows(out, records, resolvedSymbol);
   return out;
 }
 function parseDelimited(text: string, delimiter: string): unknown[][] {
@@ -97,7 +99,7 @@ function parseDelimited(text: string, delimiter: string): unknown[][] {
   row.push(cell); if (row.some((v) => v.trim())) rows.push(row);
   return rows;
 }
-export function parseWorkbookBuffer(buffer: ArrayBuffer): ImportedMarketRows {
+export function parseWorkbookBuffer(buffer: ArrayBuffer, fileName?: string): ImportedMarketRows {
   let workbook: XLSX.WorkBook;
   try {
     workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
@@ -105,25 +107,33 @@ export function parseWorkbookBuffer(buffer: ArrayBuffer): ImportedMarketRows {
     throw new Error('تعذر قراءة ملف Excel. تأكد أن الملف غير تالف ومحفوظ بصيغة مدعومة.');
   }
   const out: ImportedMarketRows = {};
+  const fallbackSymbol = symbolFromFileName(fileName);
   for (const name of workbook.SheetNames) {
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: '' });
-    const parsed = parseTabularRows(rows, name);
+    const parsed = parseTabularRows(rows, name, fallbackSymbol);
     for (const [symbol, candles] of Object.entries(parsed)) (out[symbol] ??= []).push(...candles);
   }
   return out;
 }
 
+function symbolFromFileName(fileName?: string): string | undefined {
+  if (!fileName) return undefined;
+  const base = fileName.toUpperCase().split(/[\\\\/]/).pop() ?? fileName.toUpperCase();
+  return DSE_SYMBOLS.find(({ symbol }) => new RegExp(`(?:^|[^A-Z0-9])${symbol}(?:$|[^A-Z0-9])`).test(base))?.symbol;
+}
+
 export async function parseSpreadsheet(file: File): Promise<ImportedMarketRows> {
+  const fallbackSymbol = symbolFromFileName(file.name);
   const extension = file.name.toLowerCase().split('.').pop();
   if (extension === 'csv' || extension === 'tsv' || extension === 'txt') {
     const text = await file.text();
     const delimiter = extension === 'tsv' ? '\\t' : (text.split('\\n', 1)[0]?.includes(';') ? ';' : ',');
-    return parseTabularRows(parseDelimited(text, delimiter));
+    return parseTabularRows(parseDelimited(text, delimiter), undefined, fallbackSymbol);
   }
   if (['xlsx', 'xlsm', 'xls', 'xlsb'].includes(extension ?? '')) {
-    return parseWorkbookBuffer(await file.arrayBuffer());
+    return parseWorkbookBuffer(await file.arrayBuffer(), file.name);
   }
   if (extension === 'xml') {
     const text = await file.text();
