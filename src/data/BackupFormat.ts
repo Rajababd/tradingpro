@@ -61,7 +61,7 @@ export function validateMarketDatabase(value: unknown): MarketDatabaseBackup {
 export function validateDrawingBackup(value: unknown): DrawingBackup {
   if (!record(value) || value.format !== 'tradingpro-drawings' || value.version !== BACKUP_VERSION ||
       !Array.isArray(value.drawings)) throw new Error('ملف الرسومات ليس نسخة TradingPro صالحة.');
-  const allowed = new Set(DSE_SYMBOLS.map((item) => item.symbol));
+  const allowed = new Set<string>(DSE_SYMBOLS.map((item) => item.symbol));
   const groups: DrawingBackup['drawings'] = [];
   const seen = new Set<string>();
   for (const group of value.drawings) {
