@@ -5,7 +5,7 @@ export interface DrawingJSON {
   type: string;
   seriesId?: string;
   paneIndex: number;
-  anchors: Array<{ time: number | string; logical?: number; price: number }>;
+  anchors: Array<{ time: number | string; logical?: number; logicalOffset?: number; price: number }>;
   style?: Record<string, unknown>;
   options?: Record<string, unknown>;
 }
@@ -42,6 +42,7 @@ export class DrawingManager {
   getAllDrawings(): DrawingInstance[];
   clearAll(): void;
   shiftLogicalAnchors(added: number): void;
+  rebaseLogicalAnchors(): void;
   exportDrawings(): DrawingJSON[];
   importDrawings(
     items: DrawingJSON[],
