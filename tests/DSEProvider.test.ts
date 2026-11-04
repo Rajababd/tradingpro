@@ -168,6 +168,49 @@ describe('DSEProvider', () => {
       .rejects.toThrow(/no usable OHLC rows/i);
   });
 
+  it('refreshes by adding only new dates and never overwrites an existing candle', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+      removeItem: (key: string) => { storage.delete(key); },
+    } });
+    const provider = new DSEProvider();
+    provider.importDatabase({ BBSY: [
+      { date: '2026-01-26', open: 10, high: 12, low: 9, close: 999, volume: 1, valueTraded: 2 },
+    ] }, 'replace');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([
+      ...dailyRows,
+      { date: '2026-02-04', open: '15', high: '17', low: '14', close: '16', volume_traded: '500' },
+    ]), { status: 200 })));
+    const bars = await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true });
+    expect(bars).toHaveLength(5);
+    expect(bars[0]).toMatchObject({ close: 999, volume: 1 });
+    expect(bars.at(-1)).toMatchObject({ close: 16 });
+  });
+
+  it('imports update mode by unique date and replace mode as the reference database', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+      removeItem: (key: string) => { storage.delete(key); },
+    } });
+    const provider = new DSEProvider();
+    const base = { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: null, valueTraded: null };
+    provider.importDatabase({ BBSY: [base] }, 'replace');
+    const update = provider.importDatabase({ BBSY: [
+      { ...base, close: 99 },
+      { ...base, date: '2026-01-02', close: 12 },
+    ] }, 'update');
+    expect(update).toMatchObject({ added: 1, kept: 1 });
+    expect(provider.exportDatabase().BBSY).toHaveLength(2);
+    expect(provider.exportDatabase().BBSY?.[0]?.close).toBe(11);
+    provider.importDatabase({ ABC: [{ ...base, date: '2026-02-01' }] }, 'replace');
+    expect(provider.hasCachedData('BBSY')).toBe(false);
+    expect(provider.exportDatabase().ABC).toHaveLength(1);
+  });
+
   it('keeps the previous cached history if an explicit refresh fails', async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('window', { localStorage: {
