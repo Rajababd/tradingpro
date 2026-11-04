@@ -618,3 +618,56 @@ body {
 @media (max-width: 600px) {
   .toolbar-row .menu-trigger { padding: 0 8px; }
 }
+
+
+/* ---- portable backup and restore -------------------------------------------------------------- */
+.side-toolbar { flex-direction: column; align-items: center; justify-content: flex-start; }
+.backup-tools { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.backup-divider { width: 24px; height: 1px; flex: none; margin: 2px 0; background: var(--c-rule); }
+.backup-action { color: var(--c-accent); }
+.backup-message {
+  position: fixed; z-index: 60; left: 50%; bottom: 18px; transform: translateX(-50%);
+  width: min(92vw, 520px); padding: 12px 14px; border: 1px solid var(--c-accent);
+  border-radius: 8px; background: var(--c-panel); color: var(--c-text);
+  box-shadow: 0 8px 28px rgba(0,0,0,.45); font-size: 13px; line-height: 1.5;
+}
+.backup-message.error { border-color: var(--c-danger); color: var(--c-danger); }
+.backup-modal-backdrop {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  padding: 18px; background: rgba(0,0,0,.62); overscroll-behavior: contain;
+}
+.backup-modal {
+  width: min(100%, 390px); max-height: min(82vh, 620px); overflow: auto;
+  border: 1px solid var(--c-rule); border-radius: 12px; background: var(--c-panel);
+  color: var(--c-text); box-shadow: 0 16px 48px rgba(0,0,0,.55);
+}
+.backup-modal-header {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between;
+  min-height: 52px; padding: 0 14px; border-bottom: 1px solid var(--c-rule); background: var(--c-panel);
+}
+.backup-modal-header h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.backup-close {
+  width: 36px; height: 36px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--c-muted); font-size: 24px; cursor: pointer;
+}
+.backup-modal-body { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.backup-modal-body > p { margin: 0 0 2px; color: var(--c-muted); font-size: 13px; line-height: 1.55; }
+.backup-option {
+  min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 10px; border: 1px solid var(--c-rule); border-radius: 8px; cursor: pointer;
+}
+.backup-option input { width: 38px; height: 22px; accent-color: var(--c-accent); }
+.backup-primary, .backup-choice {
+  width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--c-accent);
+  border-radius: 8px; background: transparent; color: var(--c-text); font: inherit; cursor: pointer;
+}
+.backup-primary { background: var(--c-accent); color: var(--c-ink); font-weight: 700; }
+.backup-primary:disabled { opacity: .5; cursor: not-allowed; }
+.backup-radio {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px;
+  border: 1px solid var(--c-rule); border-radius: 8px; cursor: pointer;
+}
+.backup-radio input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--c-accent); }
+.backup-radio span { display: flex; flex-direction: column; gap: 4px; }
+.backup-radio strong { font-size: 13px; }
+.backup-radio small { color: var(--c-muted); font-size: 11px; line-height: 1.45; }
