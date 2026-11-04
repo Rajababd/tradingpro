@@ -116,7 +116,28 @@ const missingLogicalProjection = { ...coordinateViewport, timeScale: { timeToCoo
 assert.equal(logicalTrend.anchorToPixel(logicalTrend.anchors[0], missingLogicalProjection), null, 'a logical anchor is never silently treated as a timestamp if logical projection is unavailable');
 const legacyTrend = new TrendLine('legacy-line', [{ time: 42, price: 5 }]);
 assert.deepEqual(legacyTrend.anchorToPixel(legacyTrend.anchors[0], coordinateViewport), { x: 999, y: 10 }, 'legacy time-only anchors still render through the timestamp fallback');
-assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport), { time: 0.21, logical: 3, price: 5 }, 'editing an anchor preserves both logical and time coordinates');
+assert.deepEqual(logicalTrend.pixelToAnchor({ x: 21, y: 10 }, coordinateViewport), { time: 0.21, logical: 3, logicalOffset: 3 - 999 / 7, price: 5 }, 'editing an anchor preserves its fractional position relative to its timestamp');
+
+// Imported anchors are rebased to the current dataset using timestamps, not stale logical indices.
+const shiftedChart = {
+  ...chart,
+  timeScale: () => ({
+    ...chart.timeScale(),
+    coordinateToLogical: (x) => x / 10 + 50,
+  }),
+};
+const manager4 = new DrawingManager();
+manager4.attach(shiftedChart, seriesA, container, (series) => series.id, (id) => id === 'A' ? seriesA : undefined);
+manager4.importDrawings([{
+  id: 'rebased-line', type: 'trend-line', seriesId: 'A', paneIndex: 0,
+  anchors: [
+    { time: 1, logical: 10, logicalOffset: 0.25, price: 10 },
+    { time: 2, logical: 20, logicalOffset: -0.25, price: 20 },
+  ],
+}], createDrawing, () => seriesA, () => seriesA);
+assert.deepEqual(manager4.getDrawing('rebased-line').anchors.map((anchor) => anchor.logical), [60.25, 69.75],
+  'timestamp rebasing follows the new chart origin while retaining fractional offsets');
+manager4.detach();
 
 // Bar measurements use logical candle distance; elapsed days remain timestamp-based.
 const registry = getToolRegistry();
