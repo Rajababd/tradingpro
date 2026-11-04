@@ -193,7 +193,7 @@ export class DSEProvider implements MarketDataProvider {
   importDatabase(
     incoming: Record<string, DailyRow[]>,
     mode: 'update' | 'replace',
-  ): { added: number; kept: number; symbols: string[] } {
+  ): { added: number; updated: number; kept: number; symbols: string[] } {
     const touched = DSE_SYMBOLS.filter((item) => incoming[item.symbol] !== undefined);
     const plans = (mode === 'replace' ? DSE_SYMBOLS : touched).map((item) => {
       const supplied = incoming[item.symbol] ?? [];
