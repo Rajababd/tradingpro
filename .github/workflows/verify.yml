@@ -25,6 +25,13 @@ jobs:
       - name: Install locked dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Upload refreshed npm lockfile for repository synchronization
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradingpro-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+
       - name: Test drawing library
         run: npm run test:drawing
 
