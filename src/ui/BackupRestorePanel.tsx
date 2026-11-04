@@ -16,7 +16,7 @@ type Props = {
   controller: DrawingController | null;
   symbol: string;
   timeframe: Timeframe;
-  onMarketDataImported: () => Promise<void>;
+  onMarketDataImported: (symbols: string[]) => Promise<void>;
 };
 
 async function downloadJson(filename: string, data: unknown): Promise<'shared' | 'downloaded'> {
@@ -129,7 +129,7 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
         });
       }
       const result = provider.importDatabase(backup.symbols, marketMode);
-      await onMarketDataImported();
+      await onMarketDataImported(result.symbols);
       setDialog(null);
       setMessage({
         text: marketMode === 'update'
