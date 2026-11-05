@@ -733,3 +733,14 @@ body {
   width: min(270px, calc(100vw - 16px));
   max-height: min(70vh, 520px);
 }
+
+/* Crosshair values: SMA on a dedicated line below price OHLC, indicator values inside their own pane. */
+.legend { white-space: pre-line; line-height: 1.55; }
+.pane-crosshair-values { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.pane-crosshair-value {
+  position: absolute; left: 10px; max-width: calc(100% - 20px); overflow: hidden;
+  padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--c-rule) 72%, transparent);
+  border-radius: 4px; background: color-mix(in srgb, var(--c-panel) 88%, transparent);
+  color: var(--c-text); font-size: 11px; line-height: 1.35; white-space: nowrap;
+  text-overflow: ellipsis; font-variant-numeric: tabular-nums;
+}

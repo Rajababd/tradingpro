@@ -188,8 +188,13 @@ export class ChartController {
       this.#series = series;
       this.#gestures = new UserGestureTracker(container);
       this.#viewport = new ViewportController(chart, this.#gestures, chart.timeScale());
-      this.#crosshair = new CrosshairController(chart, () =>
-        series.get<'Candlestick'>(PRICE_SERIES_ID),
+      this.#crosshair = new CrosshairController(
+        chart,
+        () => series.get<'Candlestick'>(PRICE_SERIES_ID),
+        () => series.list().flatMap((info) => {
+          const api = series.get(info.id);
+          return api === undefined ? [] : [{ id: info.id, paneIndex: panes.indexFor(info.paneId), api }];
+        }),
       );
       const timeScale = chart.timeScale();
       if (
@@ -254,6 +259,12 @@ export class ChartController {
       this.#viewport.setLogicalRange({ from: range.from + added, to: range.to + added });
     }
     this.#updatePriceScaleWidth();
+  }
+
+  /** Vertical offset of a pane inside the chart, used to anchor its crosshair value readout. */
+  paneTopOffset(paneIndex: number): number {
+    if (this.#chart === null || paneIndex <= 0) return 0;
+    return this.#chart.panes().slice(0, paneIndex).reduce((height, pane) => height + pane.getHeight() + 6, 0);
   }
 
   /** Idempotent. Safe before mount and after a previous dispose. */
