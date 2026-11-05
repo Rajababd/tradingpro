@@ -13,6 +13,7 @@ import { DrawingToolbar } from '../ui/DrawingToolbar';
 import { BackupRestorePanel } from '../ui/BackupRestorePanel';
 import { describeFeed, describeHistory } from '../ui/feedStatus';
 import { TopBarMenus } from '../ui/TopBarMenus';
+import { ChartStyleMenu } from '../ui/ChartStyleMenu';
 import { useMarketDataState } from '../ui/useMarketDataState';
 import { bindChartToService } from './bindChartToService';
 import { config } from './config';
@@ -161,6 +162,7 @@ export function App() {
           </label>
           <span className="market-name" title={selectedSymbol.name}>{selectedSymbol.name}</span>
           <label className="chart-type-picker"><span className="sr-only">نوع الرسم</span><select aria-label="نوع الرسم" value={priceChartType} onChange={(event) => setPriceChartType(event.target.value as 'candles' | 'line')}><option value="candles">شموع</option><option value="line">خط بياني</option></select></label>
+          <ChartStyleMenu controller={session?.chart ?? null} workspace={session?.workspace ?? null} />
           <button type="button" className="refresh-button" disabled={state.status === 'loading' || isRefreshingAll} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>
             {isRefreshingAll || state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}
           </button>
