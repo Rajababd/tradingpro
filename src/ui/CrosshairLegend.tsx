@@ -13,7 +13,16 @@ export function CrosshairLegend({ controller }: { controller: ChartController | 
     if (el === null || panesEl === null || controller === null || !controller.isMounted) return;
     const unsubscribe = controller.crosshair.subscribe((snapshot) => {
       const priceSmas = (snapshot.seriesValues ?? []).filter((item) => item.paneIndex === 0 && item.id.startsWith('sma:'));
-      el.textContent = formatLegend(snapshot, priceSmas);
+      el.replaceChildren();
+      const priceLine = document.createElement('div');
+      priceLine.textContent = formatLegend(snapshot);
+      el.append(priceLine);
+      if (priceSmas.length > 0) {
+        const smaLine = document.createElement('div');
+        smaLine.className = 'legend-sma';
+        smaLine.textContent = priceSmas.map((item) => `SMA ${item.id.slice(4)}: ${fmt(item.value)}`).join('   ·   ');
+        el.append(smaLine);
+      }
       panesEl.replaceChildren();
       if (snapshot.paneIndex === null || snapshot.paneIndex === 0) return;
       const values = (snapshot.seriesValues ?? []).filter((item) => item.paneIndex === snapshot.paneIndex);
