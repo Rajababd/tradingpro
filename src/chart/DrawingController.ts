@@ -131,12 +131,14 @@ export class DrawingController {
     const series = drawing.getSeries();
     if (!series) return null;
     const timeScale = this.#chart.timeScale();
-    const coordinates = drawing.anchors.map((anchor) => ({
-      x: timeScale.timeToCoordinate(anchor.time as never),
-      y: series.priceToCoordinate(anchor.price as never),
-    })).filter((point): point is { x: number; y: number } =>
-      point.x !== null && point.y !== null && Number.isFinite(point.x) && Number.isFinite(point.y)
-    );
+    const coordinates: Array<{ x: number; y: number }> = [];
+    for (const anchor of drawing.anchors) {
+      const x = timeScale.timeToCoordinate(anchor.time as never);
+      const y = series.priceToCoordinate(anchor.price as never);
+      if (x !== null && y !== null && Number.isFinite(x) && Number.isFinite(y)) {
+        coordinates.push({ x, y });
+      }
+    }
     if (!coordinates.length) return null;
     const x = coordinates.reduce((sum, point) => sum + point.x, 0) / coordinates.length;
     const y = coordinates.reduce((sum, point) => sum + point.y, 0) / coordinates.length;
