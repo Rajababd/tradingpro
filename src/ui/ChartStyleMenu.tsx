@@ -58,10 +58,26 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
                 <option value="0">متصل</option><option value="1">منقّط</option><option value="2">متقطع</option><option value="3">متقطع طويل</option>
               </select>
             </label>
+            <label className="chart-style-row">طريقة رسم الخط
+              <select value={Number(options.lineType ?? 0)} onChange={(event) => update({ lineType: Number(event.target.value) })}>
+                <option value="0">بسيط</option><option value="1">درجات</option><option value="2">منحني</option>
+              </select>
+            </label>
+            <label className="chart-style-row">إظهار الخط <input type="checkbox" checked={Boolean(options.lineVisible ?? true)} onChange={(event) => update({ lineVisible: event.target.checked })} /></label>
+            <label className="chart-style-row">عنوان السلسلة <input type="text" value={String(options.title ?? '')} onChange={(event) => update({ title: event.target.value })} /></label>
+            <label className="chart-style-row">حركة آخر سعر
+              <select value={Number(options.lastPriceAnimation ?? 0)} onChange={(event) => update({ lastPriceAnimation: Number(event.target.value) })}>
+                <option value="0">معطّلة</option><option value="1">مستمرة</option><option value="2">عند تحديث البيانات</option>
+              </select>
+            </label>
             <label className="chart-style-row">علامة التقاطع <input type="checkbox" checked={Boolean(options.crosshairMarkerVisible ?? true)} onChange={(event) => update({ crosshairMarkerVisible: event.target.checked })} /></label>
             <label className="chart-style-row">علامات النقاط <input type="checkbox" checked={Boolean(options.pointMarkersVisible ?? false)} onChange={(event) => update({ pointMarkersVisible: event.target.checked })} /></label>
+            <label className="chart-style-row">لون علامة التقاطع <input type="color" value={String(options.crosshairMarkerBackgroundColor ?? options.color ?? defaultLineColor(target))} onChange={(event) => update({ crosshairMarkerBackgroundColor: event.target.value })} /></label>
+            <label className="chart-style-row">لون إطار علامة التقاطع <input type="color" value={String(options.crosshairMarkerBorderColor ?? '#ffffff')} onChange={(event) => update({ crosshairMarkerBorderColor: event.target.value })} /></label>
             <label className="chart-style-row">حجم علامة التقاطع <input type="range" min="2" max="12" step="1" value={Number(options.crosshairMarkerRadius ?? 4)} onChange={(event) => update({ crosshairMarkerRadius: Number(event.target.value) })} /></label>
             <label className="chart-style-row">حجم علامات النقاط <input type="range" min="1" max="8" step="1" value={Number(options.pointMarkersRadius ?? 3)} onChange={(event) => update({ pointMarkersRadius: Number(event.target.value) })} /></label>
+            <label className="chart-style-row">لون علامات النقاط الصاعدة <input type="color" value={String(options.pointMarkersUpColor ?? options.color ?? defaultLineColor(target))} onChange={(event) => update({ pointMarkersUpColor: event.target.value })} /></label>
+            <label className="chart-style-row">لون علامات النقاط الهابطة <input type="color" value={String(options.pointMarkersDownColor ?? options.color ?? defaultLineColor(target))} onChange={(event) => update({ pointMarkersDownColor: event.target.value })} /></label>
           </>}
           {isCandle && <>
             <label className="chart-style-row">لون الشمعة الصاعدة <input type="color" value={String(options.upColor ?? '#26a69a')} onChange={(event) => update({ upColor: event.target.value, wickUpColor: event.target.value, borderUpColor: event.target.value })} /></label>
