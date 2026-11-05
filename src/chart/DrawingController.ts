@@ -5,6 +5,8 @@ import type { SeriesManager } from './SeriesManager';
 type DrawingSettingsDrawing = {
   id: string;
   type: string;
+  anchors: Array<{ time: unknown; price: number }>;
+  getSeries: () => ISeriesApi<SeriesType> | null;
   style: {
     lineColor: string;
     lineWidth: number;
@@ -120,6 +122,32 @@ export class DrawingController {
 
   get selectedDrawing(): DrawingSettingsDrawing | null {
     return this.#manager.getSelectedDrawing();
+  }
+
+  /** Returns the selected drawing's anchor midpoint in viewport coordinates. */
+  getSelectedScreenPosition(): { x: number; y: number } | null {
+    const drawing = this.#manager.getSelectedDrawing();
+    if (!drawing || !this.#chart || !this.#container || drawing.anchors.length === 0) return null;
+    const series = drawing.getSeries();
+    if (!series) return null;
+    const timeScale = this.#chart.timeScale();
+    const coordinates = drawing.anchors.map((anchor) => ({
+      x: timeScale.timeToCoordinate(anchor.time as never),
+      y: series.priceToCoordinate(anchor.price as never),
+    })).filter((point): point is { x: number; y: number } =>
+      point.x !== null && point.y !== null && Number.isFinite(point.x) && Number.isFinite(point.y)
+    );
+    if (!coordinates.length) return null;
+    const x = coordinates.reduce((sum, point) => sum + point.x, 0) / coordinates.length;
+    const y = coordinates.reduce((sum, point) => sum + point.y, 0) / coordinates.length;
+    const containerRect = this.#container.getBoundingClientRect();
+    const pane = series.getPane() as unknown as { getHTMLElement?: () => HTMLElement };
+    const paneRect = pane.getHTMLElement?.().getBoundingClientRect();
+    const leftScaleWidth = this.#chart.priceScale('left', series.getPane().paneIndex()).width();
+    return {
+      x: containerRect.left + leftScaleWidth + x,
+      y: (paneRect?.top ?? containerRect.top) + y,
+    };
   }
 
   updateSelected(patch: {
