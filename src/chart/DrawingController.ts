@@ -2,12 +2,44 @@ import type { IChartApi, ISeriesApi, SeriesType } from 'lightweight-charts';
 import { DrawingManager, getToolRegistry, type DrawingInstance, type DrawingJSON } from '../vendor/lightweight-charts-drawing.es.js';
 import type { SeriesManager } from './SeriesManager';
 
+type DrawingSettingsDrawing = {
+  id: string;
+  type: string;
+  style: {
+    lineColor: string;
+    lineWidth: number;
+    lineDash: number[];
+    fillColor: string;
+    fillOpacity: number;
+    showLabels: boolean;
+    labelFont: string;
+    labelColor: string;
+  };
+  options: {
+    visible?: boolean;
+    locked?: boolean;
+    zIndex?: number;
+    extendLeft?: boolean;
+    extendRight?: boolean;
+  };
+  trendLineOptions?: Record<string, boolean>;
+  setTrendLineOptions?: (options: Record<string, unknown>) => void;
+};
+
+type DrawingManagerWithSettings = DrawingManager & {
+  getSelectedDrawing(): DrawingSettingsDrawing | null;
+  notifyDrawingUpdated(id: string): void;
+  deselectAll(): void;
+};
+
 /**
  * Owns the drawing library lifecycle and resolves drawings by stable series identity.
  * The manager is intentionally separate from React so saved drawings remain plain JSON.
  */
 export class DrawingController {
-  readonly #manager = new DrawingManager();
+  // The bundled library exposes these runtime methods/properties but its shipped JS
+  // declarations omit them; keep the compatibility surface local to this adapter.
+  readonly #manager = new DrawingManager() as DrawingManagerWithSettings;
   readonly #registry = getToolRegistry();
   #chart: IChartApi | null = null;
   #container: HTMLElement | null = null;
@@ -82,21 +114,19 @@ export class DrawingController {
     return drawing;
   }
 
-  get selectedDrawing(): DrawingInstance | null {
+  get selectedDrawing(): DrawingSettingsDrawing | null {
     return this.#manager.getSelectedDrawing();
   }
 
   updateSelected(patch: {
-    style?: Partial<DrawingInstance['style']>;
-    options?: Partial<DrawingInstance['options']>;
+    style?: Partial<DrawingSettingsDrawing['style']>;
+    options?: Partial<NonNullable<DrawingSettingsDrawing['options']>>;
     trendLineOptions?: Record<string, boolean>;
   }): void {
     const drawing = this.#manager.getSelectedDrawing();
     if (!drawing) return;
     if (patch.style) drawing.style = { ...drawing.style, ...patch.style };
-    const configurable = drawing as DrawingInstance & {
-      setTrendLineOptions?: (options: Record<string, unknown>) => void;
-    };
+    const configurable = drawing;
     if (patch.options) {
       drawing.options = { ...drawing.options, ...patch.options };
       // TrendLine serializes its extended option set separately from the base options.
