@@ -474,6 +474,11 @@ class Cr {
   getSelectedDrawing() {
     return this._selectedId && this._drawings.get(this._selectedId) || null;
   }
+  /** Notify host applications after a drawing's style or options are edited externally. */
+  notifyDrawingUpdated(id) {
+    const drawing = this._drawings.get(id);
+    if (drawing) this.emit("drawing:updated", { drawingId: id, drawing });
+  }
   // ============ Tool Management ============
   /**
    * Set the active drawing tool
