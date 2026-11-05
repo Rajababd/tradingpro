@@ -49,7 +49,7 @@ with sync_playwright() as p:
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
-        button = page.get_by_role("button", name="Trend line")
+        button = page.get_by_role("button", name="خط الاتجاه")
         check(f"{mode}: trend-line tool is present", button.count() == 1)
         button.click()
         check(f"{mode}: trend-line tool activates", button.get_attribute("aria-pressed") == "true")
@@ -148,6 +148,31 @@ with sync_playwright() as p:
             page.wait_for_timeout(100)
             selected = page.evaluate("window.__drawingSelectedId")
             check(f"{mode}: tapping a drawing anchor selects its drawing", selected == anchor_setup["id"], selected)
+
+            # Selection must show only a compact trigger; the settings panel opens on demand.
+            settings_trigger = page.get_by_role("button", name="فتح إعدادات الشكل المرسوم")
+            check(f"{mode}: selecting a drawing shows a small floating settings trigger",
+                  settings_trigger.count() == 1)
+            check(f"{mode}: settings panel stays closed until its trigger is pressed",
+                  page.locator(".drawing-settings-panel").count() == 0)
+            if settings_trigger.count() == 1:
+                settings_trigger.click()
+                settings_panel = page.locator(".drawing-settings-panel")
+                check(f"{mode}: floating trigger opens drawing settings", settings_panel.is_visible())
+                panel_box = settings_panel.bounding_box()
+                check(f"{mode}: settings panel remains compact and does not cover the chart",
+                      panel_box is not None and panel_box["width"] <= 280 and panel_box["height"] < 520,
+                      str(panel_box))
+                trend_panel_text = settings_panel.inner_text() if settings_panel.count() else ""
+                removed_trend_settings = ("نمط الخط", "لون التسمية", "خط التسمية", "إظهار التسميات",
+                                          "لون التعبئة", "شفافية التعبئة", "إظهار الشكل", "ترتيب الرسم")
+                check(f"{mode}: trend-line settings omit the requested fields",
+                      all(label not in trend_panel_text for label in removed_trend_settings),
+                      trend_panel_text)
+                check(f"{mode}: trend-line settings retain Ray and remaining controls",
+                      "تحويل إلى شعاع (Ray)" in trend_panel_text and "سماكة الخط" in trend_panel_text,
+                      trend_panel_text)
+                page.get_by_role("button", name="إغلاق الإعدادات").click()
             page.evaluate("""() => {
               const root = document.querySelector('[data-testid="chart"]');
               root.addEventListener('pointerdown', (event) => {
@@ -188,7 +213,7 @@ with sync_playwright() as p:
 
         # Continue with a one-click tool even if the two-click tool failed; this distinguishes
         # a general click-dispatch problem from an anchor-count/second-click problem.
-        horizontal = page.get_by_role("button", name="Horizontal line")
+        horizontal = page.get_by_role("button", name="خط أفقي")
         horizontal.click()
         point = (box["x"] + box["width"] * 0.55, box["y"] + box["height"] * 0.48)
         if mode == "desktop":
@@ -216,7 +241,7 @@ with sync_playwright() as p:
         check(f"{mode}: Rectangle tool is absent from the drawing toolbar",
               page.get_by_role("button", name="Rectangle").count() == 0)
         # Exercise the remaining two-anchor tool in the real UI as well.
-        for tool_name, tool_label in (("fib-retracement", "Fib retracement"),):
+        for tool_name, tool_label in (("fib-retracement", "تصحيح فيبوناتشي"),):
             tool_button = page.get_by_role("button", name=tool_label)
             check(f"{mode}: {tool_label} tool is present", tool_button.count() == 1)
             if tool_button.count() != 1:
