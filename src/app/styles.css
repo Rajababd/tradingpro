@@ -756,3 +756,15 @@ body {
   color: var(--c-text); font-size: 12px;
 }
 .chart-type-picker select:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+.topbar .menu-trigger { flex: none; min-height: 30px; height: 30px; padding: 0 9px; border: 1px solid var(--c-rule); border-radius: 5px; font-size: 12px; white-space: nowrap; }
+.chart-style-menu { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
+.chart-style-target, .chart-style-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; color: var(--c-muted); font-size: 12px; }
+.chart-style-target select, .chart-style-row select {
+  min-height: 30px; max-width: 160px; padding: 0 7px; border: 1px solid var(--c-rule);
+  border-radius: 5px; background: var(--c-ink); color: var(--c-text); font: inherit;
+}
+.chart-style-row input[type='color'] { width: 42px; height: 28px; padding: 1px; border: 1px solid var(--c-rule); border-radius: 5px; background: var(--c-ink); }
+.chart-style-row input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--c-accent); }
+.chart-style-row input[type='range'] { width: 110px; accent-color: var(--c-accent); }
+.chart-style-row output { min-width: 42px; color: var(--c-text); text-align: end; font-variant-numeric: tabular-nums; }
