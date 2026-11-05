@@ -52,19 +52,16 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
     }
     const refresh = (event?: unknown) => {
       setActiveTool(controller.activeTool);
-      const eventName = (event as { type?: string } | undefined)?.type;
-      if (eventName === 'drawing:deselected' || eventName === 'drawing:removed' || eventName === 'drawing:cleared') {
-        setSettingsOpen(false);
-      }
+      void event;
       setRevision((value) => value + 1);
     };
     const unsubscribers = [
       controller.on('tool:changed', refresh),
       controller.on('drawing:selected', () => { setSettingsOpen(false); refresh(); }),
-      controller.on('drawing:deselected', refresh),
+      controller.on('drawing:deselected', () => { setSettingsOpen(false); refresh(); }),
       controller.on('drawing:updated', refresh),
-      controller.on('drawing:removed', refresh),
-      controller.on('drawing:cleared', refresh),
+      controller.on('drawing:removed', () => { setSettingsOpen(false); refresh(); }),
+      controller.on('drawing:cleared', () => { setSettingsOpen(false); refresh(); }),
     ];
     refresh();
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
