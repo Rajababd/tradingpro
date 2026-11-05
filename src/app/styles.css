@@ -735,7 +735,8 @@ body {
 }
 
 /* Crosshair values: SMA on a dedicated line below price OHLC, indicator values inside their own pane. */
-.legend { white-space: pre-line; line-height: 1.55; }
+.legend { white-space: normal; line-height: 1.55; }
+.legend-sma { display: block; }
 .pane-crosshair-values { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
 .pane-crosshair-value {
   position: absolute; left: 10px; max-width: calc(100% - 20px); overflow: hidden;
