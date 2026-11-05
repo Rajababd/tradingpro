@@ -63,7 +63,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
   const options = selected?.options;
   const isTrendLine = selected?.type === 'trend-line';
   const trendOptions = isTrendLine
-    ? (selected as typeof selected & { trendLineOptions?: Record<string, boolean> })?.trendLineOptions
+    ? (selected as import('../vendor/lightweight-charts-drawing.es.js').DrawingInstance & { trendLineOptions?: Record<string, boolean> }).trendLineOptions
     : undefined;
 
   return (
@@ -127,6 +127,10 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
               <input aria-label="لون التسمية" type="color" value={style?.labelColor ?? '#2962ff'} onChange={(event) => controller.updateSelected({ style: { labelColor: event.target.value } })} />
             </label>
             <label className="drawing-setting-row">
+              <span>خط التسمية</span>
+              <input aria-label="خط التسمية" type="text" value={style?.labelFont ?? '12px sans-serif'} onChange={(event) => controller.updateSelected({ style: { labelFont: event.target.value } })} />
+            </label>
+            <label className="drawing-setting-row">
               <span>إظهار التسميات</span>
               <input aria-label="إظهار التسميات" type="checkbox" checked={style?.showLabels ?? true} onChange={(event) => controller.updateSelected({ style: { showLabels: event.target.checked } })} />
             </label>
@@ -155,6 +159,10 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
             <label className="drawing-setting-row">
               <span>تمديد لليمين</span>
               <input aria-label="تمديد لليمين" type="checkbox" checked={options?.extendRight === true} onChange={(event) => controller.updateSelected({ options: { extendRight: event.target.checked } })} />
+            </label>
+            <label className="drawing-setting-row">
+              <span>ترتيب الرسم</span>
+              <input aria-label="ترتيب الرسم" type="number" min="-100" max="100" value={options?.zIndex ?? 0} onChange={(event) => controller.updateSelected({ options: { zIndex: Number(event.target.value) } })} />
             </label>
 
             {isTrendLine && (
