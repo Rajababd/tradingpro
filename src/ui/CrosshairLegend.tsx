@@ -3,6 +3,7 @@ import type { ChartController } from '../chart/ChartController';
 import { formatLegend } from './legendFormat';
 
 const fmt = (value: number) => value.toFixed(2);
+const seriesLabel = (id: string) => ({ 'rsi:rsi': 'RSI', 'volume:volume': 'Volume', 'obv:obv': 'OBV', 'ad:ad': 'A/D', 'macd:macd': 'MACD', 'macd:signal': 'Signal', 'macd:histogram': 'Histogram' }[id] ?? (id.startsWith('sma:') ? `SMA ${id.slice(4)}` : id.toUpperCase()));
 export function CrosshairLegend({ controller }: { controller: ChartController | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const panesRef = useRef<HTMLDivElement>(null);
@@ -20,7 +21,7 @@ export function CrosshairLegend({ controller }: { controller: ChartController | 
       const label = document.createElement('div');
       label.className = 'pane-crosshair-value';
       label.style.top = `${controller.paneTopOffset(snapshot.paneIndex) + 7}px`;
-      label.textContent = values.map((item) => `${item.id.replace(':', ' ')}  ${fmt(item.value)}`).join('   ·   ');
+      label.textContent = values.map((item) => `${seriesLabel(item.id)}  ${fmt(item.value)}`).join('   ·   ');
       panesEl.append(label);
     });
     return () => { unsubscribe(); el.textContent = ''; panesEl.replaceChildren(); };
