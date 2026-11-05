@@ -59,16 +59,30 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
               </select>
             </label>
             <label className="chart-style-row">علامة التقاطع <input type="checkbox" checked={Boolean(options.crosshairMarkerVisible ?? true)} onChange={(event) => update({ crosshairMarkerVisible: event.target.checked })} /></label>
+            <label className="chart-style-row">علامات النقاط <input type="checkbox" checked={Boolean(options.pointMarkersVisible ?? false)} onChange={(event) => update({ pointMarkersVisible: event.target.checked })} /></label>
+            <label className="chart-style-row">حجم علامة التقاطع <input type="range" min="2" max="12" step="1" value={Number(options.crosshairMarkerRadius ?? 4)} onChange={(event) => update({ crosshairMarkerRadius: Number(event.target.value) })} /></label>
+            <label className="chart-style-row">حجم علامات النقاط <input type="range" min="1" max="8" step="1" value={Number(options.pointMarkersRadius ?? 3)} onChange={(event) => update({ pointMarkersRadius: Number(event.target.value) })} /></label>
           </>}
           {isCandle && <>
             <label className="chart-style-row">لون الشمعة الصاعدة <input type="color" value={String(options.upColor ?? '#26a69a')} onChange={(event) => update({ upColor: event.target.value, wickUpColor: event.target.value, borderUpColor: event.target.value })} /></label>
-            <label className="chart-style-row">لون الشمعة الهابطة <input type="color" value={String(options.downColor ?? '#ef5350')} onChange={(event) => update({ downColor: event.target.value, wickDownColor: event.target.value, borderDownColor: event.target.value })} /></label>
+            <label className="chart-style-row">لون الشمعة الهابطة <input type="color" value={String(options.downColor ?? '#ef5350')} onChange={(event) => update({ downColor: event.target.value })} /></label>
+            <label className="chart-style-row">فتيل الشمعة الصاعدة <input type="color" value={String(options.wickUpColor ?? options.upColor ?? '#26a69a')} onChange={(event) => update({ wickUpColor: event.target.value })} /></label>
+            <label className="chart-style-row">فتيل الشمعة الهابطة <input type="color" value={String(options.wickDownColor ?? options.downColor ?? '#ef5350')} onChange={(event) => update({ wickDownColor: event.target.value })} /></label>
+            <label className="chart-style-row">حدود الشمعة الصاعدة <input type="color" value={String(options.borderUpColor ?? options.upColor ?? '#26a69a')} onChange={(event) => update({ borderUpColor: event.target.value })} /></label>
+            <label className="chart-style-row">حدود الشمعة الهابطة <input type="color" value={String(options.borderDownColor ?? options.downColor ?? '#ef5350')} onChange={(event) => update({ borderDownColor: event.target.value })} /></label>
             <label className="chart-style-row">إظهار الحدود <input type="checkbox" checked={Boolean(options.borderVisible ?? false)} onChange={(event) => update({ borderVisible: event.target.checked })} /></label>
             <label className="chart-style-row">إظهار الفتائل <input type="checkbox" checked={Boolean(options.wickVisible ?? true)} onChange={(event) => update({ wickVisible: event.target.checked })} /></label>
           </>}
           {(isLine || isCandle) && <>
             <label className="chart-style-row">خط السعر <input type="checkbox" checked={Boolean(options.priceLineVisible ?? false)} onChange={(event) => update({ priceLineVisible: event.target.checked })} /></label>
             <label className="chart-style-row">آخر قيمة على المحور <input type="checkbox" checked={Boolean(options.lastValueVisible ?? true)} onChange={(event) => update({ lastValueVisible: event.target.checked })} /></label>
+            <label className="chart-style-row">لون خط السعر <input type="color" value={String(options.priceLineColor ?? '#9aa0a6')} onChange={(event) => update({ priceLineColor: event.target.value })} /></label>
+            <label className="chart-style-row">سماكة خط السعر <input type="range" min="1" max="4" step="1" value={Number(options.priceLineWidth ?? 1)} onChange={(event) => update({ priceLineWidth: Number(event.target.value) })} /></label>
+            <label className="chart-style-row">نمط خط السعر
+              <select value={Number(options.priceLineStyle ?? 2)} onChange={(event) => update({ priceLineStyle: Number(event.target.value) })}>
+                <option value="0">متصل</option><option value="1">منقّط</option><option value="2">متقطع</option><option value="3">متقطع طويل</option>
+              </select>
+            </label>
           </>}
           {!isLine && !isCandle && <p className="menu-empty">إعدادات هذه السلسلة غير مدعومة في لوحة الخطوط والشموع حالياً.</p>}
         </div>
