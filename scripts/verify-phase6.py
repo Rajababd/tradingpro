@@ -128,7 +128,7 @@ with sync_playwright() as p:
     before = ev("__h.vis()"); engine_before = ev(f"{T}.engine.list().length")
     open_menu("Indicators"); page.keyboard.press("Escape"); open_menu("SMA"); page.keyboard.press("Escape")
     check("M1 opening and closing both menus changes no visibility and creates no calculation", ev("__h.vis()") == before and ev(f"{T}.engine.list().length") == engine_before == 0)
-    check("M1 the price chart is untouched: one pane, one series", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.series.list().length") == 1)
+    check("M1 the price chart is untouched: one pane, candle series plus hidden line series", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.series.list().length") == 2)
 
     # ---- M13: lists come from the registry
     open_menu("Indicators")
@@ -148,7 +148,7 @@ with sync_playwright() as p:
     ev(f"""() => {{ const times = {T}.engine.times; window.__paneDrawing = {T}.chart.drawings.create('trend-line', 'pane-rsi-persistence', 'rsi:rsi', [{{ time: times[30], price: 50 }}, {{ time: times[60], price: 60 }}]); }}""")
     check("M3 a drawing on the RSI pane is initially attached", ev("window.__paneDrawing.isAttached()"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
-    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.paneCount") == 1 and ev(f"{T}.chart.paneSeriesCounts") == [1] and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
+    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.paneCount") == 1 and ev(f"{T}.chart.paneSeriesCounts") == [2] and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
     Hs = ev("__h.paneRows()")
     check("M3 showing RSI again creates a fresh pane, restores cached values and reattaches its drawing", ev("__h.paneRows().length") == 2 and Hs[1] > 40 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"), Hs)
