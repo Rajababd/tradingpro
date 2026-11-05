@@ -24,6 +24,10 @@ type DrawingSettingsDrawing = {
   };
   trendLineOptions?: Record<string, boolean>;
   setTrendLineOptions?: (options: Record<string, unknown>) => void;
+  horizontalLineOptions?: { showPrice?: boolean; showLabel?: boolean; labelText?: string };
+  setHorizontalLineOptions?: (options: Record<string, unknown>) => void;
+  fibOptions?: { levels?: number[]; showPrices?: boolean; showPercentages?: boolean; extendLines?: boolean; reverseDirection?: boolean };
+  setFibOptions?: (options: Record<string, unknown>) => void;
 };
 
 type DrawingManagerWithSettings = DrawingManager & {
@@ -122,6 +126,8 @@ export class DrawingController {
     style?: Partial<DrawingSettingsDrawing['style']>;
     options?: Partial<NonNullable<DrawingSettingsDrawing['options']>>;
     trendLineOptions?: Record<string, boolean>;
+    horizontalLineOptions?: Record<string, unknown>;
+    fibOptions?: Record<string, unknown>;
   }): void {
     const drawing = this.#manager.getSelectedDrawing();
     if (!drawing) return;
@@ -129,10 +135,14 @@ export class DrawingController {
     const configurable = drawing;
     if (patch.options) {
       drawing.options = { ...drawing.options, ...patch.options };
-      // TrendLine serializes its extended option set separately from the base options.
+      // These subclasses serialize their complete option bags separately from base options.
       configurable.setTrendLineOptions?.(patch.options as Record<string, unknown>);
+      configurable.setHorizontalLineOptions?.(patch.options as Record<string, unknown>);
+      configurable.setFibOptions?.(patch.options as Record<string, unknown>);
     }
     if (patch.trendLineOptions) configurable.setTrendLineOptions?.(patch.trendLineOptions);
+    if (patch.horizontalLineOptions) configurable.setHorizontalLineOptions?.(patch.horizontalLineOptions);
+    if (patch.fibOptions) configurable.setFibOptions?.(patch.fibOptions);
     this.#manager.notifyDrawingUpdated(drawing.id);
   }
 
