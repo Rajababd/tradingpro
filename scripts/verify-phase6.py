@@ -89,6 +89,21 @@ with sync_playwright() as p:
           page.get_by_role("button", name="Indicators").is_visible() and page.get_by_role("button", name="SMA").is_visible(), shell)
     check("compact shell: symbol selector and refresh action are visible in the first row",
           page.locator(".topbar .market-select-label select").is_visible() and page.get_by_role("button", name="تحديث البيانات").is_visible(), shell)
+
+    # ---- price chart type and per-series appearance settings
+    chart_type = page.locator('select[aria-label="نوع الرسم"]')
+    chart_type.select_option("line")
+    page.wait_for_function(f"{T}.chart.priceChartType === 'line'")
+    check("price chart selector switches to a real line series", ev(f"{T}.chart.series.list().find((s) => s.id === 'price-line').visible") and not ev(f"{T}.chart.series.list().find((s) => s.id === 'price').visible"))
+    page.get_by_role("button", name="المظهر", exact=False).click()
+    page.wait_for_selector("#menu-chart-style")
+    page.locator("#menu-chart-style .chart-style-target select").select_option("price-line")
+    page.locator("#menu-chart-style input[aria-label='لون الخط']").fill("#123456")
+    check("series style changes are saved locally", ev("JSON.parse(localStorage.getItem('tradingpro.series-style-settings.v1'))['price-line'].color") == "#123456")
+    page.keyboard.press("Escape")
+    chart_type.select_option("candles")
+    page.wait_for_function(f"{T}.chart.priceChartType === 'candles'")
+    check("price chart selector restores candlesticks without refetching", ev(f"{T}.chart.series.list().find((s) => s.id === 'price').visible") and not ev(f"{T}.chart.series.list().find((s) => s.id === 'price-line').visible") and len(requested_urls) == 6)
     # Price-axis width must grow when the visible labels gain digits, then shrink again.
     base_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
     original_candles = ev(f"{T}.service.candles")
@@ -142,6 +157,13 @@ with sync_playwright() as p:
     H0 = ev("__h.paneRows()")
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
     check("M3 clicking RSI shows it: switch on, a second pane appears", ev(f"{T}.workspace.getSnapshot().indicators.find((r) => r.definitionId === 'rsi').displayed") and ev("__h.paneRows().length") == 2)
+
+    chart_box = page.locator(".chart").bounding_box()
+    rsi_y = chart_box["y"] + ev(f"{T}.chart.paneTopOffset(1)") + 24
+    page.mouse.move(chart_box["x"] + chart_box["width"] * 0.55, rsi_y)
+    page.wait_for_timeout(120)
+    rsi_readout = page.locator(".pane-crosshair-value")
+    check("crosshair shows the hovered RSI value inside the RSI pane", rsi_readout.count() == 1 and "RSI" in rsi_readout.inner_text(), rsi_readout.all_inner_texts())
     check("M3 the menu stays open while toggling (several can be switched)", page.locator("#menu-indicators").count() == 1)
     ev(f"() => {{ window.__rsi = {T}.chart.series.get('rsi:rsi'); }}")
     check("M3 RSI data in the chart equals the engine's RSI, warm-up as gaps", ev(f"__h.close(__h.shown('rsi:rsi'), {T}.engine.values('rsi','rsi'))") and ev("__h.shown('rsi:rsi').slice(0, 14).every((v) => v === null)"))
@@ -220,6 +242,12 @@ with sync_playwright() as p:
 
     # ---- M6: SMA on price (Scenario C)
     switch("data-sma-source", "price").click(); page.wait_for_timeout(200)
+
+    chart_box = page.locator(".chart").bounding_box()
+    page.mouse.move(chart_box["x"] + chart_box["width"] * 0.55, chart_box["y"] + 24)
+    page.wait_for_timeout(120)
+    price_legend = page.locator("[data-testid=legend]").inner_text()
+    check("price crosshair displays SMA on a separate line below OHLC", "\\nSMA price:" in price_legend, price_legend)
     check("M6 SMA on price: a line in the PRICE pane (no new pane)", ev(f"{T}.chart.series.get('sma:price').getPane().paneIndex()") == 0 and ev("__h.paneRows().length") == 3)
     check("M6 its values equal an independent SMA(20) of the closes",
           ev(f"__h.close(__h.shown('sma:price'), __h.sma({T}.service.candles.map((c) => c.close), 20))"))
