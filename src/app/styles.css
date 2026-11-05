@@ -671,3 +671,26 @@ body {
 .backup-radio span { display: flex; flex-direction: column; gap: 4px; }
 .backup-radio strong { font-size: 13px; }
 .backup-radio small { color: var(--c-muted); font-size: 11px; line-height: 1.45; }
+
+
+/* ---- selected drawing settings ---------------------------------------------------------------- */
+.drawing-tools-shell { position: relative; display: flex; width: 100%; justify-content: center; }
+.drawing-settings-panel {
+  position: absolute; z-index: 30; top: 0; left: calc(100% + 8px); width: min(270px, calc(100vw - 58px));
+  max-height: min(78vh, 620px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px; border: 1px solid var(--c-rule); border-radius: 9px;
+  background: var(--c-panel); color: var(--c-text); box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.drawing-settings-header { position: sticky; top: -8px; z-index: 1; display:flex; align-items:center; justify-content:space-between;
+  min-height:36px; margin:-8px -8px 6px; padding:0 8px 0 12px; background:var(--c-panel); border-bottom:1px solid var(--c-rule); }
+.drawing-settings-close { width:32px; height:32px; border:0; border-radius:5px; background:transparent; color:var(--c-muted); font-size:20px; }
+.drawing-settings-body { display:flex; flex-direction:column; gap:2px; }
+.drawing-setting-row { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:36px; color:var(--c-muted); font-size:12px; }
+.drawing-setting-row input[type='color'] { width:42px; height:28px; padding:1px; border:1px solid var(--c-rule); border-radius:5px; background:var(--c-ink); }
+.drawing-setting-row input[type='checkbox'] { width:18px; height:18px; accent-color:var(--c-accent); }
+.drawing-setting-row input[type='range'] { width:92px; accent-color:var(--c-accent); }
+.drawing-setting-row select { min-height:30px; max-width:112px; border:1px solid var(--c-rule); border-radius:5px; background:var(--c-ink); color:var(--c-text); font:inherit; }
+.drawing-settings-divider { height:1px; margin:5px 0; background:var(--c-rule); }
+.drawing-settings-subtitle { padding:3px 0; color:var(--c-text); font-size:12px; }
+.drawing-delete-button { min-height:38px; margin-top:8px; border:1px solid var(--c-danger); border-radius:6px; background:color-mix(in srgb, var(--c-danger) 12%, transparent); color:var(--c-danger); font:inherit; font-weight:650; cursor:pointer; }
+.drawing-settings-close:focus-visible, .drawing-setting-row input:focus-visible, .drawing-setting-row select:focus-visible, .drawing-delete-button:focus-visible { outline:2px solid var(--c-accent); outline-offset:2px; }
