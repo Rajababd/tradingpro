@@ -82,6 +82,33 @@ export class DrawingController {
     return drawing;
   }
 
+  get selectedDrawing(): DrawingInstance | null {
+    return this.#manager.getSelectedDrawing();
+  }
+
+  updateSelected(patch: {
+    style?: Partial<DrawingInstance['style']>;
+    options?: Partial<DrawingInstance['options']>;
+    trendLineOptions?: Record<string, boolean>;
+  }): void {
+    const drawing = this.#manager.getSelectedDrawing();
+    if (!drawing) return;
+    if (patch.style) drawing.style = { ...drawing.style, ...patch.style };
+    if (patch.options) drawing.options = { ...drawing.options, ...patch.options };
+    if (patch.trendLineOptions) {
+      const configurable = drawing as DrawingInstance & {
+        setTrendLineOptions?: (options: Record<string, boolean>) => void;
+      };
+      configurable.setTrendLineOptions?.(patch.trendLineOptions);
+    }
+    this.#manager.notifyDrawingUpdated(drawing.id);
+  }
+
+  removeSelected(): void {
+    const drawing = this.#manager.getSelectedDrawing();
+    if (drawing) this.#manager.removeDrawing(drawing.id);
+  }
+
   remove(id: string): void {
     this.#manager.removeDrawing(id);
   }
