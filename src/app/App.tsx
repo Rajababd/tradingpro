@@ -31,6 +31,7 @@ export function App() {
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [symbol, setSymbol] = useState<string>(config.symbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(config.timeframe);
+  const [priceChartType, setPriceChartType] = useState<'candles' | 'line'>('candles');
   const provider = useMemo(() => new DSEProvider(), []);
   const fallback = useMemo(
     () => initialMarketDataState({ id: provider.id, displayName: provider.displayName, isSimulated: false }),
@@ -38,6 +39,8 @@ export function App() {
   );
   const [session, setSession] = useState<{ chart: ChartController; service: MarketDataService; workspace: IndicatorWorkspace } | null>(null);
   const state = useMarketDataState(session?.service ?? null, fallback);
+
+  useEffect(() => { session?.chart.setPriceChartType(priceChartType); }, [session, priceChartType]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -157,6 +160,7 @@ export function App() {
             </select>
           </label>
           <span className="market-name" title={selectedSymbol.name}>{selectedSymbol.name}</span>
+          <label className="chart-type-picker"><span className="sr-only">نوع الرسم</span><select aria-label="نوع الرسم" value={priceChartType} onChange={(event) => setPriceChartType(event.target.value as 'candles' | 'line')}><option value="candles">شموع</option><option value="line">خط بياني</option></select></label>
           <button type="button" className="refresh-button" disabled={state.status === 'loading' || isRefreshingAll} onClick={() => setRefreshRequest({ symbol, timeframe, nonce: (refreshRequest?.nonce ?? 0) + 1 })}>
             {isRefreshingAll || state.status === 'loading' ? 'جارٍ التحديث…' : 'تحديث البيانات'}
           </button>
