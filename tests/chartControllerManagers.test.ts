@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({ chart: null as unknown }));
 vi.mock('lightweight-charts', () => ({
   createChart: vi.fn(() => h.chart),
   CandlestickSeries: { type: 'Candlestick' },
+  LineSeries: { type: 'Line' },
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
   TrackingModeExitMode: { OnTouchEnd: 0 },
@@ -32,7 +33,10 @@ describe('ChartController managers', () => {
     expect(() => controller.series).toThrow(/not mounted/);
     expect(() => controller.crosshair).toThrow(/not mounted/);
     controller.mount(container);
-    expect(controller.series.list()).toEqual([{ id: 'price', paneId: 'price', type: 'Candlestick', visible: true }]);
+    expect(controller.series.list()).toEqual([
+      { id: 'price', paneId: 'price', type: 'Candlestick', visible: true },
+      { id: 'price-line', paneId: 'price', type: 'Line', visible: false },
+    ]);
     expect(controller.panes.order).toEqual(['price']);
     controller.dispose();
     expect(() => controller.series).toThrow(/not mounted/);
@@ -41,7 +45,7 @@ describe('ChartController managers', () => {
 
   it('creates exactly one price series at mount and protects it from removal', () => {
     controller.mount(container);
-    expect(fake.addSeries).toHaveBeenCalledTimes(1);
+    expect(fake.addSeries).toHaveBeenCalledTimes(3);
     expect(() => controller.visibility.removeSeries('price')).toThrow(/protected/);
   });
 
