@@ -60,6 +60,13 @@ assert.equal(updateEvents, 1, 'host settings edits emit the persistence update e
 assert.equal(drawing.options.extendRight, true, 'trend lines support the ray extension option');
 assert.equal(drawing.toJSON().options.extendRight, true, 'the ray setting survives drawing serialization');
 assert.equal(drawing.style.lineWidth, 2);
+assert.equal(drawing.style.lineOpacity, 1, 'legacy drawings default to fully opaque lines');
+drawing.style = { ...drawing.style, lineOpacity: 0.35 };
+manager.notifyDrawingUpdated('line-1');
+assert.equal(drawing.toJSON().style.lineOpacity, 0.35, 'line opacity is persisted in drawing JSON');
+const opacityRoundTrip = new TrendLine('opacity-round-trip', drawing.anchors, drawing.toJSON().style, drawing.toJSON().options);
+opacityRoundTrip.fromJSON(drawing.toJSON());
+assert.equal(opacityRoundTrip.style.lineOpacity, 0.35, 'line opacity survives drawing JSON restoration');
 assert.equal(manager.getSelectedDrawing(), drawing);
 assert.equal(drawing.state, 'selected');
 assert.equal(drawing.options.extendRight, true);
