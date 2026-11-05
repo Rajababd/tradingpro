@@ -10,6 +10,7 @@ type DrawingSettingsDrawing = {
   style: {
     lineColor: string;
     lineWidth: number;
+    lineOpacity: number;
     lineDash: number[];
     fillColor: string;
     fillOpacity: number;
