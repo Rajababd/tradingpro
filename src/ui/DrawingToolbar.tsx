@@ -62,9 +62,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
   const style = selected?.style;
   const options = selected?.options;
   const isTrendLine = selected?.type === 'trend-line';
-  const trendOptions = isTrendLine
-    ? (selected as import('../vendor/lightweight-charts-drawing.es.js').DrawingInstance & { trendLineOptions?: Record<string, boolean> }).trendLineOptions
-    : undefined;
+  const trendOptions = isTrendLine ? selected?.trendLineOptions : undefined;
 
   return (
     <div className="drawing-tools-shell">
