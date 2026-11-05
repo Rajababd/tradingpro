@@ -247,7 +247,7 @@ with sync_playwright() as p:
     page.mouse.move(chart_box["x"] + chart_box["width"] * 0.55, chart_box["y"] + 24)
     page.wait_for_timeout(120)
     price_legend = page.locator("[data-testid=legend]").inner_text()
-    check("price crosshair displays SMA on a separate line below OHLC", "\\nSMA price:" in price_legend, price_legend)
+    check("price crosshair displays SMA on a separate line below OHLC", "\nSMA price:" in price_legend, price_legend)
     check("M6 SMA on price: a line in the PRICE pane (no new pane)", ev(f"{T}.chart.series.get('sma:price').getPane().paneIndex()") == 0 and ev("__h.paneRows().length") == 3)
     check("M6 its values equal an independent SMA(20) of the closes",
           ev(f"__h.close(__h.shown('sma:price'), __h.sma({T}.service.candles.map((c) => c.close), 20))"))
