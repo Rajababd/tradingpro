@@ -48,6 +48,29 @@ with sync_playwright() as p:
         page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
+        legend_layout = page.locator(".legend").evaluate("""el => {
+            const style = getComputedStyle(el);
+            return {fontSize: style.fontSize, whiteSpace: style.whiteSpace,
+                    overflowWrap: style.overflowWrap, maxWidth: style.maxWidth};
+        }""")
+        check(f"{mode}: crosshair legend font is reduced by 10%",
+              abs(float(legend_layout["fontSize"].replace("px", "")) - 10.8) < 0.01,
+              str(legend_layout))
+        check(f"{mode}: crosshair legend is allowed to wrap dynamically",
+              legend_layout["whiteSpace"] == "normal" and legend_layout["overflowWrap"] == "anywhere",
+              str(legend_layout))
+        if mode == "phone":
+            wrap_metrics = page.locator(".legend").evaluate("""el => {
+                el.textContent = "2026-11-05  O 123456789012345.12  H 123456789012345.34  L 123456789012345.01  C 123456789012345.23";
+                return {clientWidth: el.clientWidth, scrollWidth: el.scrollWidth,
+                        height: el.getBoundingClientRect().height,
+                        lineHeight: parseFloat(getComputedStyle(el).lineHeight)};
+            }""")
+            check(f"{mode}: long OHLC values wrap without horizontal overflow",
+                  wrap_metrics["scrollWidth"] <= wrap_metrics["clientWidth"] + 1 and
+                  wrap_metrics["height"] > wrap_metrics["lineHeight"] * 1.4,
+                  str(wrap_metrics))
+            page.locator(".legend").evaluate("el => { el.textContent = ''; }")
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
         button = page.get_by_role("button", name="خط الاتجاه")
         check(f"{mode}: trend-line tool is present", button.count() == 1)
@@ -172,6 +195,22 @@ with sync_playwright() as p:
                 check(f"{mode}: trend-line settings retain Ray and remaining controls",
                       "تحويل إلى شعاع (Ray)" in trend_panel_text and "سماكة الخط" in trend_panel_text,
                       trend_panel_text)
+                opacity_slider = page.get_by_role("slider", name="شفافية الخط")
+                check(f"{mode}: drawing settings expose a line-opacity slider", opacity_slider.count() == 1)
+                if opacity_slider.count() == 1:
+                    opacity_slider.evaluate("""el => {
+                      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+                      setter.call(el, "35");
+                      el.dispatchEvent(new Event("input", {bubbles:true}));
+                      el.dispatchEvent(new Event("change", {bubbles:true}));
+                    }""")
+                    page.wait_for_function("""() => {
+                      const drawing = window.__tradingpro.chart.drawings.export()[0];
+                      return Math.abs((drawing?.style?.lineOpacity ?? -1) - 0.35) < 0.001;
+                    }""", timeout=3000)
+                    check(f"{mode}: changing line opacity updates the selected drawing",
+                          abs((export_drawings()[0].get("style", {}).get("lineOpacity", -1)) - 0.35) < 0.001,
+                          str(export_drawings()[0].get("style")))
                 page.get_by_role("button", name="إغلاق الإعدادات").click()
             page.evaluate("""() => {
               const root = document.querySelector('[data-testid="chart"]');
@@ -346,6 +385,11 @@ with sync_playwright() as p:
             check(f"{mode}: restored drawing IDs and types match",
                   [(d.get("id"), d.get("type")) for d in restored_drawings] ==
                   [(d.get("id"), d.get("type")) for d in expected_drawings])
+            restored_trend = next((d for d in restored_drawings if d.get("type") == "trend-line"), None)
+            check(f"{mode}: line opacity survives page reload",
+                  restored_trend is not None and
+                  abs((restored_trend.get("style", {}).get("lineOpacity", -1)) - 0.35) < 0.001,
+                  str(restored_trend))
         except Exception as error:
             check(f"{mode}: drawings restore after page reload", False, str(error))
             print(f"DEBUG {mode}: expected persisted drawings={expected_drawings}")
