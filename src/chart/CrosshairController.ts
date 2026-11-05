@@ -42,6 +42,7 @@ export class CrosshairController {
     private readonly chart: ChartPort,
     private readonly getPriceSeries: () => ISeriesApi<'Candlestick'> | undefined,
     private readonly getSeriesDescriptors?: () => readonly CrosshairSeriesDescriptor[],
+    private readonly getCandleAtTime?: (time: number) => CandleValues | null,
   ) {
     this.#moves = new EventChannel<CrosshairSnapshot>({
       onFirstListener: () => this.chart.subscribeCrosshairMove(this.#handler),
@@ -59,7 +60,7 @@ export class CrosshairController {
       logical: param.logical as number,
       paneIndex: param.paneIndex ?? null,
       point: param.point === undefined || param.point === null ? null : { x: param.point.x, y: param.point.y },
-      candle: toCandleValues(bar),
+      candle: toCandleValues(bar) ?? this.getCandleAtTime?.(param.time) ?? null,
     };
     if (this.getSeriesDescriptors === undefined) return snapshot;
     const seriesValues = this.getSeriesDescriptors().flatMap((series) => {
