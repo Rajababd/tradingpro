@@ -49,6 +49,17 @@ describe('ChartController managers', () => {
     expect(() => controller.visibility.removeSeries('price')).toThrow(/protected/);
   });
 
+  it('switches the price pane between candlesticks and the close-price line', () => {
+    controller.mount(container);
+    controller.setPriceChartType('line');
+    expect(controller.priceChartType).toBe('line');
+    expect(controller.series.list().find((item) => item.id === 'price')?.visible).toBe(false);
+    expect(controller.series.list().find((item) => item.id === 'price-line')?.visible).toBe(true);
+    controller.setPriceChartType('candles');
+    expect(controller.series.list().find((item) => item.id === 'price')?.visible).toBe(true);
+    expect(controller.series.list().find((item) => item.id === 'price-line')?.visible).toBe(false);
+  });
+
   it('indicator series share the one chart: no second chart, no duplicate price series', () => {
     controller.mount(container);
     controller.mount(container); // idempotent
