@@ -54,6 +54,7 @@ manager.on('drawing:updated', ({ drawingId }) => {
 manager.selectDrawing('line-1');
 assert.equal(manager.getSelectedDrawing(), drawing);
 drawing.options = { ...drawing.options, extendRight: true };
+drawing.setTrendLineOptions({ extendRight: true });
 manager.notifyDrawingUpdated('line-1');
 assert.equal(updateEvents, 1, 'host settings edits emit the persistence update event');
 assert.equal(drawing.options.extendRight, true, 'trend lines support the ray extension option');
