@@ -152,14 +152,18 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
               <span>قفل الشكل</span>
               <input aria-label="قفل الشكل" type="checkbox" checked={options?.locked === true} onChange={(event) => controller.updateSelected({ options: { locked: event.target.checked } })} />
             </label>
-            <label className="drawing-setting-row">
-              <span>تمديد لليسار</span>
-              <input aria-label="تمديد لليسار" type="checkbox" checked={options?.extendLeft === true} onChange={(event) => controller.updateSelected({ options: { extendLeft: event.target.checked } })} />
-            </label>
-            <label className="drawing-setting-row">
-              <span>تمديد لليمين</span>
-              <input aria-label="تمديد لليمين" type="checkbox" checked={options?.extendRight === true} onChange={(event) => controller.updateSelected({ options: { extendRight: event.target.checked } })} />
-            </label>
+            {!isTrendLine && (
+              <>
+                <label className="drawing-setting-row">
+                  <span>تمديد لليسار</span>
+                  <input aria-label="تمديد لليسار" type="checkbox" checked={options?.extendLeft === true} onChange={(event) => controller.updateSelected({ options: { extendLeft: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>تمديد لليمين</span>
+                  <input aria-label="تمديد لليمين" type="checkbox" checked={options?.extendRight === true} onChange={(event) => controller.updateSelected({ options: { extendRight: event.target.checked } })} />
+                </label>
+              </>
+            )}
             <label className="drawing-setting-row">
               <span>ترتيب الرسم</span>
               <input aria-label="ترتيب الرسم" type="number" min="-100" max="100" value={options?.zIndex ?? 0} onChange={(event) => controller.updateSelected({ options: { zIndex: Number(event.target.value) } })} />
