@@ -133,7 +133,7 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--c-muted);
   text-shadow: 0 0 4px var(--c-ink);
-  /* Wrapping keeps the complete date and OHLC readout inside the chart on phones. */
+  /* Keep the complete date and OHLC readout visible on phones by wrapping long values. */
 }
 
 .status[data-tone='warn'] {
