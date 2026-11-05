@@ -122,14 +122,19 @@ body {
   top: 8px;
   left: 12px;
   z-index: 2;
+  width: fit-content;
   max-width: calc(100% - 24px);
-  overflow: hidden;
-  white-space: pre;
+  min-width: 0;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none; /* never intercept chart gestures */
-  font-size: 12px;
+  font-size: 10.8px; /* 10% smaller than the previous 12px legend */
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
   color: var(--c-muted);
   text-shadow: 0 0 4px var(--c-ink);
+  /* Keep the complete date and OHLC readout visible on phones by wrapping long values. */
 }
 
 .status[data-tone='warn'] {
@@ -671,3 +676,96 @@ body {
 .backup-radio span { display: flex; flex-direction: column; gap: 4px; }
 .backup-radio strong { font-size: 13px; }
 .backup-radio small { color: var(--c-muted); font-size: 11px; line-height: 1.45; }
+
+
+/* ---- selected drawing settings ---------------------------------------------------------------- */
+.drawing-tools-shell { position: relative; display: flex; width: 100%; justify-content: center; }
+.drawing-settings-panel {
+  position: absolute; z-index: 30; top: 0; left: calc(100% + 8px); width: min(270px, calc(100vw - 58px));
+  max-height: min(78vh, 620px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px; border: 1px solid var(--c-rule); border-radius: 9px;
+  background: var(--c-panel); color: var(--c-text); box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.drawing-settings-header { position: sticky; top: -8px; z-index: 1; display:flex; align-items:center; justify-content:space-between;
+  min-height:36px; margin:-8px -8px 6px; padding:0 8px 0 12px; background:var(--c-panel); border-bottom:1px solid var(--c-rule); }
+.drawing-settings-close { width:32px; height:32px; border:0; border-radius:5px; background:transparent; color:var(--c-muted); font-size:20px; }
+.drawing-settings-body { display:flex; flex-direction:column; gap:2px; }
+.drawing-setting-row { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:36px; color:var(--c-muted); font-size:12px; }
+.drawing-setting-row input[type='color'] { width:42px; height:28px; padding:1px; border:1px solid var(--c-rule); border-radius:5px; background:var(--c-ink); }
+.drawing-setting-row input[type='checkbox'] { width:18px; height:18px; accent-color:var(--c-accent); }
+.drawing-setting-row input[type='range'] { width:92px; accent-color:var(--c-accent); }
+.drawing-setting-row output { min-width:2.5em; color:var(--c-text); text-align:end; font-variant-numeric:tabular-nums; }
+.drawing-setting-row select { min-height:30px; max-width:112px; border:1px solid var(--c-rule); border-radius:5px; background:var(--c-ink); color:var(--c-text); font:inherit; }
+.drawing-settings-divider { height:1px; margin:5px 0; background:var(--c-rule); }
+.drawing-settings-subtitle { padding:3px 0; color:var(--c-text); font-size:12px; }
+.drawing-delete-button { min-height:38px; margin-top:8px; border:1px solid var(--c-danger); border-radius:6px; background:color-mix(in srgb, var(--c-danger) 12%, transparent); color:var(--c-danger); font:inherit; font-weight:650; cursor:pointer; }
+.drawing-settings-close:focus-visible, .drawing-setting-row input:focus-visible, .drawing-setting-row select:focus-visible, .drawing-delete-button:focus-visible { outline:2px solid var(--c-accent); outline-offset:2px; }
+
+.drawing-setting-row input[type='text'],
+.drawing-setting-row input[type='number'] {
+  width: 112px; min-height: 30px; padding: 0 7px; border: 1px solid var(--c-rule);
+  border-radius: 5px; background: var(--c-ink); color: var(--c-text); font: inherit;
+}
+
+
+/* Compact drawing settings affordance anchored to the selected drawing. */
+.drawing-floating-settings-trigger {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--c-accent);
+  border-radius: 9px;
+  background: var(--c-panel);
+  color: var(--c-accent);
+  box-shadow: 0 3px 12px rgba(0,0,0,.38);
+  font-size: 18px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.drawing-floating-settings-trigger:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.drawing-settings-panel {
+  position: fixed;
+  width: min(270px, calc(100vw - 16px));
+  max-height: min(70vh, 520px);
+}
+
+/* Crosshair values: SMA on a dedicated line below price OHLC, indicator values inside their own pane. */
+.legend { white-space: normal; line-height: 1.55; }
+.legend-sma { display: block; }
+.pane-crosshair-values { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.pane-crosshair-value {
+  position: absolute; left: 10px; max-width: calc(100% - 20px); overflow: hidden;
+  padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--c-rule) 72%, transparent);
+  border-radius: 4px; background: color-mix(in srgb, var(--c-panel) 88%, transparent);
+  color: var(--c-text); font-size: 11px; line-height: 1.35; white-space: nowrap;
+  text-overflow: ellipsis; font-variant-numeric: tabular-nums;
+}
+
+/* The top row behaves like a horizontally scrollable TradingView toolbar on narrow screens. */
+.topbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.topbar::-webkit-scrollbar { display: none; }
+.brand, .market-select-label, .refresh-button, .chart-type-picker { flex: none; }
+.market-name { flex: 0 0 auto; max-width: 260px; }
+.chart-type-picker select {
+  display: block; height: 30px; min-height: 30px; max-width: 112px; padding: 0 7px;
+  border: 1px solid var(--c-rule); border-radius: 5px; background: var(--c-ink);
+  color: var(--c-text); font-size: 12px;
+}
+.chart-type-picker select:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+.topbar .menu-trigger { flex: none; min-height: 30px; height: 30px; padding: 0 9px; border: 1px solid var(--c-rule); border-radius: 5px; font-size: 12px; white-space: nowrap; }
+.chart-style-menu { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
+.chart-style-target, .chart-style-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; color: var(--c-muted); font-size: 12px; }
+.chart-style-target select, .chart-style-row select {
+  min-height: 30px; max-width: 160px; padding: 0 7px; border: 1px solid var(--c-rule);
+  border-radius: 5px; background: var(--c-ink); color: var(--c-text); font: inherit;
+}
+.chart-style-row input[type='color'] { width: 42px; height: 28px; padding: 1px; border: 1px solid var(--c-rule); border-radius: 5px; background: var(--c-ink); }
+.chart-style-row input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--c-accent); }
+.chart-style-row input[type='range'] { width: 110px; accent-color: var(--c-accent); }
+.chart-style-row output { min-width: 42px; color: var(--c-text); text-align: end; font-variant-numeric: tabular-nums; }

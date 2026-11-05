@@ -48,8 +48,31 @@ with sync_playwright() as p:
         page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
+        legend_layout = page.locator(".legend").evaluate("""el => {
+            const style = getComputedStyle(el);
+            return {fontSize: style.fontSize, whiteSpace: style.whiteSpace,
+                    overflowWrap: style.overflowWrap, maxWidth: style.maxWidth};
+        }""")
+        check(f"{mode}: crosshair legend font is reduced by 10%",
+              abs(float(legend_layout["fontSize"].replace("px", "")) - 10.8) < 0.01,
+              str(legend_layout))
+        check(f"{mode}: crosshair legend is allowed to wrap dynamically",
+              legend_layout["whiteSpace"] == "normal" and legend_layout["overflowWrap"] == "anywhere",
+              str(legend_layout))
+        if mode == "phone":
+            wrap_metrics = page.locator(".legend").evaluate("""el => {
+                el.textContent = "2026-11-05  O 123456789012345.12  H 123456789012345.34  L 123456789012345.01  C 123456789012345.23";
+                return {clientWidth: el.clientWidth, scrollWidth: el.scrollWidth,
+                        height: el.getBoundingClientRect().height,
+                        lineHeight: parseFloat(getComputedStyle(el).lineHeight)};
+            }""")
+            check(f"{mode}: long OHLC values wrap without horizontal overflow",
+                  wrap_metrics["scrollWidth"] <= wrap_metrics["clientWidth"] + 1 and
+                  wrap_metrics["height"] > wrap_metrics["lineHeight"] * 1.4,
+                  str(wrap_metrics))
+            page.locator(".legend").evaluate("el => { el.textContent = ''; }")
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
-        button = page.get_by_role("button", name="Trend line")
+        button = page.get_by_role("button", name="خط الاتجاه")
         check(f"{mode}: trend-line tool is present", button.count() == 1)
         button.click()
         check(f"{mode}: trend-line tool activates", button.get_attribute("aria-pressed") == "true")
@@ -148,6 +171,47 @@ with sync_playwright() as p:
             page.wait_for_timeout(100)
             selected = page.evaluate("window.__drawingSelectedId")
             check(f"{mode}: tapping a drawing anchor selects its drawing", selected == anchor_setup["id"], selected)
+
+            # Selection must show only a compact trigger; the settings panel opens on demand.
+            settings_trigger = page.get_by_role("button", name="فتح إعدادات الشكل المرسوم")
+            check(f"{mode}: selecting a drawing shows a small floating settings trigger",
+                  settings_trigger.count() == 1)
+            check(f"{mode}: settings panel stays closed until its trigger is pressed",
+                  page.locator(".drawing-settings-panel").count() == 0)
+            if settings_trigger.count() == 1:
+                settings_trigger.click()
+                settings_panel = page.locator(".drawing-settings-panel")
+                check(f"{mode}: floating trigger opens drawing settings", settings_panel.is_visible())
+                panel_box = settings_panel.bounding_box()
+                check(f"{mode}: settings panel remains compact and does not cover the chart",
+                      panel_box is not None and panel_box["width"] <= 280 and panel_box["height"] < 520,
+                      str(panel_box))
+                trend_panel_text = settings_panel.inner_text() if settings_panel.count() else ""
+                removed_trend_settings = ("نمط الخط", "لون التسمية", "خط التسمية", "إظهار التسميات",
+                                          "لون التعبئة", "شفافية التعبئة", "إظهار الشكل", "ترتيب الرسم")
+                check(f"{mode}: trend-line settings omit the requested fields",
+                      all(label not in trend_panel_text for label in removed_trend_settings),
+                      trend_panel_text)
+                check(f"{mode}: trend-line settings retain Ray and remaining controls",
+                      "تحويل إلى شعاع (Ray)" in trend_panel_text and "سماكة الخط" in trend_panel_text,
+                      trend_panel_text)
+                opacity_slider = page.get_by_role("slider", name="شفافية الخط")
+                check(f"{mode}: drawing settings expose a line-opacity slider", opacity_slider.count() == 1)
+                if opacity_slider.count() == 1:
+                    opacity_slider.evaluate("""el => {
+                      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+                      setter.call(el, "35");
+                      el.dispatchEvent(new Event("input", {bubbles:true}));
+                      el.dispatchEvent(new Event("change", {bubbles:true}));
+                    }""")
+                    page.wait_for_function("""() => {
+                      const drawing = window.__tradingpro.chart.drawings.export()[0];
+                      return Math.abs((drawing?.style?.lineOpacity ?? -1) - 0.35) < 0.001;
+                    }""", timeout=3000)
+                    check(f"{mode}: changing line opacity updates the selected drawing",
+                          abs((export_drawings()[0].get("style", {}).get("lineOpacity", -1)) - 0.35) < 0.001,
+                          str(export_drawings()[0].get("style")))
+                page.get_by_role("button", name="إغلاق الإعدادات").click()
             page.evaluate("""() => {
               const root = document.querySelector('[data-testid="chart"]');
               root.addEventListener('pointerdown', (event) => {
@@ -188,7 +252,7 @@ with sync_playwright() as p:
 
         # Continue with a one-click tool even if the two-click tool failed; this distinguishes
         # a general click-dispatch problem from an anchor-count/second-click problem.
-        horizontal = page.get_by_role("button", name="Horizontal line")
+        horizontal = page.get_by_role("button", name="خط أفقي")
         horizontal.click()
         point = (box["x"] + box["width"] * 0.55, box["y"] + box["height"] * 0.48)
         if mode == "desktop":
@@ -216,7 +280,7 @@ with sync_playwright() as p:
         check(f"{mode}: Rectangle tool is absent from the drawing toolbar",
               page.get_by_role("button", name="Rectangle").count() == 0)
         # Exercise the remaining two-anchor tool in the real UI as well.
-        for tool_name, tool_label in (("fib-retracement", "Fib retracement"),):
+        for tool_name, tool_label in (("fib-retracement", "تصحيح فيبوناتشي"),):
             tool_button = page.get_by_role("button", name=tool_label)
             check(f"{mode}: {tool_label} tool is present", tool_button.count() == 1)
             if tool_button.count() != 1:
@@ -321,6 +385,11 @@ with sync_playwright() as p:
             check(f"{mode}: restored drawing IDs and types match",
                   [(d.get("id"), d.get("type")) for d in restored_drawings] ==
                   [(d.get("id"), d.get("type")) for d in expected_drawings])
+            restored_trend = next((d for d in restored_drawings if d.get("type") == "trend-line"), None)
+            check(f"{mode}: line opacity survives page reload",
+                  restored_trend is not None and
+                  abs((restored_trend.get("style", {}).get("lineOpacity", -1)) - 0.35) < 0.001,
+                  str(restored_trend))
         except Exception as error:
             check(f"{mode}: drawings restore after page reload", False, str(error))
             print(f"DEBUG {mode}: expected persisted drawings={expected_drawings}")

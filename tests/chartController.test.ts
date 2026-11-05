@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('lightweight-charts', () => ({
   createChart: mocks.createChart,
   CandlestickSeries: { type: 'Candlestick' },
+  LineSeries: { type: 'Line' },
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
   TrackingModeExitMode: { OnTouchEnd: 0, OnNextTap: 1 },
@@ -54,7 +55,7 @@ describe('ChartController', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
     expect(mocks.chart.addSeries.mock.calls[0]?.[2]).toBe(PRICE_PANE_INDEX);
     expect(c.isMounted).toBe(true);
   });
@@ -77,7 +78,7 @@ describe('ChartController', () => {
     c.mount(el);
     c.mount(el);
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
   });
 
   it('refuses to mount to a different container while mounted', () => {
@@ -103,8 +104,8 @@ describe('ChartController', () => {
     c.mount(document.createElement('div'));
     c.setCandles([candle(100)]);
     c.setCandles([candle(100), candle(200)]);
-    expect(mocks.series.setData).toHaveBeenCalledTimes(2);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.series.setData).toHaveBeenCalledTimes(4);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
   });
 
   it('rebases drawing anchors by timestamp and shifts the viewport when older candles are prepended', () => {

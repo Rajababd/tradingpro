@@ -1,10 +1,12 @@
 import {
   CandlestickSeries,
+  LineSeries,
   ColorType,
   CrosshairMode,
   TrackingModeExitMode,
   createChart,
   type CandlestickData,
+  type LineData,
   type IChartApi,
   type UTCTimestamp,
 } from 'lightweight-charts';
@@ -21,8 +23,11 @@ import { VisibilityModel } from './VisibilityModel';
 
 /** The permanent base (price) pane. Indicator panes come after it. */
 export const PRICE_PANE_INDEX = 0;
+export const PRICE_LINE_SERIES_ID = 'price-line';
 
 export type ChartTheme = Pick<Theme, 'ink' | 'rule' | 'muted' | 'up' | 'down'>;
+
+const toLineData = (c: Candle): LineData<UTCTimestamp> => ({ time: c.time as number as UTCTimestamp, value: c.close });
 
 const toCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> => ({
   time: c.time as number as UTCTimestamp,
@@ -55,6 +60,7 @@ export class ChartController {
   #priceScaleRangeHandler: (() => void) | null = null;
   #priceScaleWidth = 64;
   #priceCandles: Candle[] = [];
+  #priceChartType: 'candles' | 'line' = 'candles';
 
   /** Current minimum width reserved for right-axis labels. */
   get priceScaleMinimumWidth(): number {
@@ -183,13 +189,20 @@ export class ChartController {
         },
         paneId: PRICE_PANE_ID,
       });
+      visibility.addSeries({ id: PRICE_LINE_SERIES_ID, definition: LineSeries, options: { color: '#5aa9e6', lineWidth: 2, priceLineVisible: false, visible: false }, paneId: PRICE_PANE_ID, visible: false });
       this.#visibility = visibility;
       this.#panes = panes;
       this.#series = series;
       this.#gestures = new UserGestureTracker(container);
       this.#viewport = new ViewportController(chart, this.#gestures, chart.timeScale());
-      this.#crosshair = new CrosshairController(chart, () =>
-        series.get<'Candlestick'>(PRICE_SERIES_ID),
+      this.#crosshair = new CrosshairController(
+        chart,
+        () => series.get<'Candlestick'>(PRICE_SERIES_ID),
+        () => series.list().flatMap((info) => {
+          const api = series.get(info.id);
+          return api === undefined ? [] : [{ id: info.id, paneIndex: panes.indexFor(info.paneId), api }];
+        }),
+        (time) => { const candle = this.#priceCandles.find((item) => item.time === time); return candle === undefined ? null : { open: candle.open, high: candle.high, low: candle.low, close: candle.close }; },
       );
       const timeScale = chart.timeScale();
       if (
@@ -208,6 +221,16 @@ export class ChartController {
     this.#container = container;
   }
 
+  setPriceChartType(type: 'candles' | 'line'): void {
+    if (this.#series === null) throw new Error('ChartController is not mounted.');
+    if (type === this.#priceChartType) return;
+    this.#priceChartType = type;
+    this.#series.setVisible(PRICE_SERIES_ID, type === 'candles');
+    this.#series.setVisible(PRICE_LINE_SERIES_ID, type === 'line');
+  }
+
+  get priceChartType(): 'candles' | 'line' { return this.#priceChartType; }
+
   /**
    * Replaces the whole dataset and resets the view to fit it. Expects candles already
    * validated by normalizeCandles. Incremental updates (later phase) must use a
@@ -219,6 +242,7 @@ export class ChartController {
     }
     this.#priceCandles = [...candles];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
+    this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).setData(candles.map(toLineData));
     this.#drawings.rebaseLogicalAnchors();
     this.#viewport.fitContent();
     this.#updatePriceScaleWidth();
@@ -232,6 +256,7 @@ export class ChartController {
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).update(toCandlestickData(candle));
+    this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).update(toLineData(candle));
     const last = this.#priceCandles.at(-1);
     if (last?.time === candle.time) this.#priceCandles[this.#priceCandles.length - 1] = candle;
     else this.#priceCandles.push(candle);
@@ -249,11 +274,18 @@ export class ChartController {
     const range = this.#viewport.getLogicalRange();
     this.#priceCandles = [...all];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
+    this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).setData(all.map(toLineData));
     this.#drawings.rebaseLogicalAnchors();
     if (range !== null && added > 0) {
       this.#viewport.setLogicalRange({ from: range.from + added, to: range.to + added });
     }
     this.#updatePriceScaleWidth();
+  }
+
+  /** Vertical offset of a pane inside the chart, used to anchor its crosshair value readout. */
+  paneTopOffset(paneIndex: number): number {
+    if (this.#chart === null || paneIndex <= 0) return 0;
+    return this.#chart.panes().slice(0, paneIndex).reduce((height, pane) => height + pane.getHeight() + 6, 0);
   }
 
   /** Idempotent. Safe before mount and after a previous dispose. */
