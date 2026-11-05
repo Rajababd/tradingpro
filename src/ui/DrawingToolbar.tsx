@@ -87,8 +87,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
 
   return (
     <>
-      <div className="drawing-tools-shell">
-        <div className="drawing-toolbar" role="group" aria-label="Drawing tools">
+      <div className="drawing-toolbar" role="group" aria-label="Drawing tools">
           <span className="sr-only">Draw</span>
           {available.map((tool) => (
             <button
@@ -113,7 +112,6 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
           <button type="button" className="drawing-tool-button" aria-label="Clear drawings" title="Clear drawings" disabled={controller === null} onClick={() => controller?.clear()}>
             <span aria-hidden="true">⌫</span>
           </button>
-        </div>
       </div>
 
       {selected && position && controller && (
