@@ -744,3 +744,15 @@ body {
   color: var(--c-text); font-size: 11px; line-height: 1.35; white-space: nowrap;
   text-overflow: ellipsis; font-variant-numeric: tabular-nums;
 }
+
+/* The top row behaves like a horizontally scrollable TradingView toolbar on narrow screens. */
+.topbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.topbar::-webkit-scrollbar { display: none; }
+.brand, .market-select-label, .refresh-button, .chart-type-picker { flex: none; }
+.market-name { flex: 0 0 auto; max-width: 260px; }
+.chart-type-picker select {
+  display: block; height: 30px; min-height: 30px; max-width: 112px; padding: 0 7px;
+  border: 1px solid var(--c-rule); border-radius: 5px; background: var(--c-ink);
+  color: var(--c-text); font-size: 12px;
+}
+.chart-type-picker select:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
