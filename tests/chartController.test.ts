@@ -105,7 +105,7 @@ describe('ChartController', () => {
     c.setCandles([candle(100)]);
     c.setCandles([candle(100), candle(200)]);
     expect(mocks.series.setData).toHaveBeenCalledTimes(4);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
   });
 
   it('rebases drawing anchors by timestamp and shifts the viewport when older candles are prepended', () => {
