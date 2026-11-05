@@ -94,14 +94,20 @@ export class DrawingController {
     const drawing = this.#manager.getSelectedDrawing();
     if (!drawing) return;
     if (patch.style) drawing.style = { ...drawing.style, ...patch.style };
-    if (patch.options) drawing.options = { ...drawing.options, ...patch.options };
-    if (patch.trendLineOptions) {
-      const configurable = drawing as DrawingInstance & {
-        setTrendLineOptions?: (options: Record<string, boolean>) => void;
-      };
-      configurable.setTrendLineOptions?.(patch.trendLineOptions);
+    const configurable = drawing as DrawingInstance & {
+      setTrendLineOptions?: (options: Record<string, boolean>) => void;
+    };
+    if (patch.options) {
+      drawing.options = { ...drawing.options, ...patch.options };
+      // TrendLine serializes its extended option set separately from the base options.
+      configurable.setTrendLineOptions?.(patch.options as Record<string, boolean>);
     }
+    if (patch.trendLineOptions) configurable.setTrendLineOptions?.(patch.trendLineOptions);
     this.#manager.notifyDrawingUpdated(drawing.id);
+  }
+
+  deselectAll(): void {
+    this.#manager.deselectAll();
   }
 
   removeSelected(): void {
