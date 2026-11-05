@@ -145,6 +145,19 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
               </select>
             </label>
             <label className="drawing-setting-row">
+              <span>شفافية الخط</span>
+              <input
+                aria-label="شفافية الخط"
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={Math.round((style?.lineOpacity ?? 1) * 100)}
+                onChange={(event) => controller.updateSelected({ style: { lineOpacity: Number(event.target.value) / 100 } })}
+              />
+              <output aria-label="نسبة شفافية الخط">{Math.round((style?.lineOpacity ?? 1) * 100)}%</output>
+            </label>
+            <label className="drawing-setting-row">
               <span>قفل الشكل</span>
               <input aria-label="قفل الشكل" type="checkbox" checked={options?.locked === true} onChange={(event) => controller.updateSelected({ options: { locked: event.target.checked } })} />
             </label>
