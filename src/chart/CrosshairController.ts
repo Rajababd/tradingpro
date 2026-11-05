@@ -1,4 +1,4 @@
-import type { ISeriesApi, MouseEventParams } from 'lightweight-charts';
+import type { ISeriesApi, MouseEventParams, SeriesType } from 'lightweight-charts';
 import type { UnixSeconds } from '../types/marketData';
 import { EventChannel, type Unsubscribe } from '../utils/eventChannel';
 import type { ChartPort } from './ChartPort';
@@ -21,7 +21,7 @@ type CandleValues = NonNullable<CrosshairSnapshot['candle']>;
 export interface CrosshairSeriesDescriptor {
   readonly id: string;
   readonly paneIndex: number;
-  readonly api: ISeriesApi;
+  readonly api: ISeriesApi<SeriesType>;
 }
 function toCandleValues(bar: unknown): CandleValues | null {
   if (typeof bar !== 'object' || bar === null) return null;
