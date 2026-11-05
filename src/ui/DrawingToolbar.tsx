@@ -167,6 +167,50 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
               <input aria-label="ترتيب الرسم" type="number" min="-100" max="100" value={options?.zIndex ?? 0} onChange={(event) => controller.updateSelected({ options: { zIndex: Number(event.target.value) } })} />
             </label>
 
+            {selected.type === 'horizontal-line' && (
+              <>
+                <div className="drawing-settings-divider" />
+                <strong className="drawing-settings-subtitle">إعدادات الخط الأفقي</strong>
+                <label className="drawing-setting-row">
+                  <span>إظهار السعر</span>
+                  <input aria-label="إظهار سعر الخط الأفقي" type="checkbox" checked={selected.horizontalLineOptions?.showPrice !== false} onChange={(event) => controller.updateSelected({ horizontalLineOptions: { showPrice: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>إظهار التسمية</span>
+                  <input aria-label="إظهار تسمية الخط الأفقي" type="checkbox" checked={selected.horizontalLineOptions?.showLabel === true} onChange={(event) => controller.updateSelected({ horizontalLineOptions: { showLabel: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>نص التسمية</span>
+                  <input aria-label="نص تسمية الخط الأفقي" type="text" value={selected.horizontalLineOptions?.labelText ?? ''} onChange={(event) => controller.updateSelected({ horizontalLineOptions: { labelText: event.target.value } })} />
+                </label>
+              </>
+            )}
+            {selected.type === 'fib-retracement' && (
+              <>
+                <div className="drawing-settings-divider" />
+                <strong className="drawing-settings-subtitle">إعدادات فيبوناتشي</strong>
+                <label className="drawing-setting-row">
+                  <span>إظهار الأسعار</span>
+                  <input aria-label="إظهار أسعار فيبوناتشي" type="checkbox" checked={selected.fibOptions?.showPrices !== false} onChange={(event) => controller.updateSelected({ fibOptions: { showPrices: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>إظهار النسب</span>
+                  <input aria-label="إظهار نسب فيبوناتشي" type="checkbox" checked={selected.fibOptions?.showPercentages !== false} onChange={(event) => controller.updateSelected({ fibOptions: { showPercentages: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>تمديد المستويات</span>
+                  <input aria-label="تمديد مستويات فيبوناتشي" type="checkbox" checked={selected.fibOptions?.extendLines === true} onChange={(event) => controller.updateSelected({ fibOptions: { extendLines: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>عكس الاتجاه</span>
+                  <input aria-label="عكس اتجاه فيبوناتشي" type="checkbox" checked={selected.fibOptions?.reverseDirection === true} onChange={(event) => controller.updateSelected({ fibOptions: { reverseDirection: event.target.checked } })} />
+                </label>
+                <label className="drawing-setting-row">
+                  <span>المستويات</span>
+                  <input aria-label="مستويات فيبوناتشي" type="text" value={selected.fibOptions?.levels?.join(', ') ?? '0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618, 2.618'} onChange={(event) => controller.updateSelected({ fibOptions: { levels: event.target.value.split(',').map((value) => Number(value.trim())).filter((value) => Number.isFinite(value)) } })} />
+                </label>
+              </>
+            )}
             {isTrendLine && (
               <>
                 <div className="drawing-settings-divider" />
