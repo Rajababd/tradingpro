@@ -98,7 +98,10 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
               aria-pressed={activeTool === tool.type}
               disabled={controller === null}
               title={`${TOOL_LABELS[tool.type]} · ${tool.requiredAnchors} click${tool.requiredAnchors === 1 ? '' : 's'}`}
-              onClick={() => controller?.setActiveTool(activeTool === tool.type ? null : tool.type)}
+              onClick={() => {
+                setSettingsOpen(false);
+                controller?.setActiveTool(activeTool === tool.type ? null : tool.type);
+              }}
             >
               <span aria-hidden="true">{TOOL_GLYPHS[tool.type]}</span>
             </button>
@@ -114,7 +117,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
           </button>
       </div>
 
-      {selected && position && controller && (
+      {selected && position && controller && activeTool === null && (
         <FloatingButton position={position} onClick={() => setSettingsOpen((open) => !open)} />
       )}
 
