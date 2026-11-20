@@ -61,6 +61,7 @@ export class ChartController {
   #priceScaleWidth = 64;
   #priceCandles: Candle[] = [];
   #priceChartType: 'candles' | 'line' = 'candles';
+  #verticalPinch: { distance: number; range: { from: number; to: number }; focalPrice: number; focalRatio: number } | null = null;
 
   /** Current minimum width reserved for right-axis labels. */
   get priceScaleMinimumWidth(): number {
@@ -170,6 +171,7 @@ export class ChartController {
       rightPriceScale: { borderColor: t.rule },
       timeScale: { borderColor: t.rule },
       crosshair: { mode: CrosshairMode.Normal },
+      handleScale: { pinch: true },
       trackingMode: { exitMode: TrackingModeExitMode.OnNextTap },
     });
 
@@ -219,6 +221,10 @@ export class ChartController {
     }
     this.#chart = chart;
     this.#container = container;
+    container.addEventListener('touchstart', this.#onVerticalPinchStart, { capture: true, passive: false });
+    container.addEventListener('touchmove', this.#onVerticalPinchMove, { capture: true, passive: false });
+    container.addEventListener('touchend', this.#onVerticalPinchEnd, { capture: true, passive: false });
+    container.addEventListener('touchcancel', this.#onVerticalPinchEnd, { capture: true, passive: false });
   }
 
   setPriceChartType(type: 'candles' | 'line'): void {
@@ -295,6 +301,11 @@ export class ChartController {
     // Detach library subscriptions before the chart is destroyed.
     this.#priceScaleRangeHandler?.();
     this.#priceScaleRangeHandler = null;
+    this.#container?.removeEventListener('touchstart', this.#onVerticalPinchStart, { capture: true });
+    this.#container?.removeEventListener('touchmove', this.#onVerticalPinchMove, { capture: true });
+    this.#container?.removeEventListener('touchend', this.#onVerticalPinchEnd, { capture: true });
+    this.#container?.removeEventListener('touchcancel', this.#onVerticalPinchEnd, { capture: true });
+    this.#verticalPinch = null;
     this.#drawings?.dispose();
     this.#crosshair?.dispose();
     this.#viewport?.dispose();
@@ -313,6 +324,68 @@ export class ChartController {
     this.#gestures = null;
     this.#priceCandles = [];
   }
+
+
+  /**
+   * Lightweight Charts' built-in pinch gesture zooms the shared time scale.
+   * Capture a vertically aligned two-finger pinch first so it can zoom the main
+   * price scale independently, without changing the horizontal time range.
+   */
+  #onVerticalPinchStart = (event: TouchEvent): void => {
+    if (event.touches.length !== 2 || this.#chart === null || this.#series === null) return;
+    const first = event.touches[0];
+    const second = event.touches[1];
+    if (first === undefined || second === undefined) return;
+    const deltaX = Math.abs(second.clientX - first.clientX);
+    const deltaY = Math.abs(second.clientY - first.clientY);
+    if (deltaY < Math.max(24, deltaX * 1.15)) return;
+    const paneElement = this.#chart.panes()[0]?.getHTMLElement();
+    const paneRect = paneElement?.getBoundingClientRect();
+    if (paneRect === undefined || paneRect === null) return;
+    const centerX = (first.clientX + second.clientX) / 2;
+    const centerY = (first.clientY + second.clientY) / 2;
+    if (centerX < paneRect.left || centerX > paneRect.right || centerY < paneRect.top || centerY > paneRect.bottom) return;
+    const priceSeries = this.#series.get<'Candlestick'>(PRICE_SERIES_ID);
+    if (priceSeries === undefined) return;
+    const priceScale = this.#chart.priceScale('right');
+    const visible = priceScale.getVisibleRange();
+    const topPrice = priceSeries.coordinateToPrice(0);
+    const bottomPrice = priceSeries.coordinateToPrice(paneRect.height);
+    const range = visible ?? (topPrice !== null && bottomPrice !== null
+      ? { from: Math.min(topPrice, bottomPrice), to: Math.max(topPrice, bottomPrice) }
+      : null);
+    const focalPrice = priceSeries.coordinateToPrice(centerY - paneRect.top);
+    if (range === null || focalPrice === null || !Number.isFinite(range.from) || !Number.isFinite(range.to) || range.to <= range.from) return;
+    const distance = deltaY;
+    if (distance < 24) return;
+    this.#verticalPinch = { distance, range: { from: range.from, to: range.to }, focalPrice, focalRatio: (focalPrice - range.from) / (range.to - range.from) };
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
+  #onVerticalPinchMove = (event: TouchEvent): void => {
+    const pinch = this.#verticalPinch;
+    if (pinch === null) return;
+    if (event.touches.length !== 2) { this.#verticalPinch = null; return; }
+    const first = event.touches[0];
+    const second = event.touches[1];
+    if (first === undefined || second === undefined) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const distance = Math.abs(second.clientY - first.clientY);
+    if (distance < 12 || this.#chart === null) return;
+    const initialSpan = pinch.range.to - pinch.range.from;
+    const nextSpan = Math.max(initialSpan / 100, Math.min(initialSpan * 100, initialSpan * pinch.distance / distance));
+    const nextFrom = pinch.focalPrice - pinch.focalRatio * nextSpan;
+    const priceScale = this.#chart.priceScale('right');
+    priceScale.setAutoScale(false);
+    priceScale.setVisibleRange({ from: nextFrom, to: nextFrom + nextSpan });
+  };
+
+  #onVerticalPinchEnd = (event: TouchEvent): void => {
+    if (this.#verticalPinch === null) return;
+    if (event.touches.length < 2) this.#verticalPinch = null;
+  };
 
   #mounted<T>(value: T | null): T {
     if (value === null) throw new Error('ChartController is not mounted.');
