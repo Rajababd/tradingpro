@@ -78,6 +78,50 @@ with sync_playwright() as p:
         check(f"{mode}: trend-line tool activates", button.get_attribute("aria-pressed") == "true")
 
         box = page.locator('[data-testid="chart"]').bounding_box()
+        if mode == "phone":
+            pinch = page.evaluate("""() => {
+              const api = window.__tradingpro.chart.series.get('price');
+              const pane = api.getPane().getHTMLElement();
+              const rect = pane.getBoundingClientRect();
+              const x = rect.left + rect.width * 0.5;
+              const centerY = rect.top + rect.height * 0.5;
+              const scale = api.priceScale();
+              const visible = scale.getVisibleRange();
+              const top = api.coordinateToPrice(0);
+              const bottom = api.coordinateToPrice(rect.height);
+              const before = visible || {from: Math.min(top, bottom), to: Math.max(top, bottom)};
+              const timeBefore = window.__tradingpro.chart.viewport.getLogicalRange();
+              const target = document.elementFromPoint(x, centerY);
+              const make = (identifier, y) => new Touch({
+                identifier, target, clientX: x, clientY: y, pageX: x, pageY: y,
+                screenX: x, screenY: y, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
+              });
+              const a = make(201, centerY - 40), b = make(202, centerY + 40);
+              target.dispatchEvent(new TouchEvent('touchstart', {
+                bubbles: true, cancelable: true, touches: [a, b], targetTouches: [a, b], changedTouches: [a, b]
+              }));
+              const a2 = make(201, centerY - 60), b2 = make(202, centerY + 60);
+              target.dispatchEvent(new TouchEvent('touchmove', {
+                bubbles: true, cancelable: true, touches: [a2, b2], targetTouches: [a2, b2], changedTouches: [a2, b2]
+              }));
+              target.dispatchEvent(new TouchEvent('touchend', {
+                bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [a2, b2]
+              }));
+              const after = scale.getVisibleRange();
+              const timeAfter = window.__tradingpro.chart.viewport.getLogicalRange();
+              const result = {
+                beforeSpan: before.to - before.from,
+                afterSpan: after ? after.to - after.from : null,
+                timeUnchanged: timeBefore && timeAfter &&
+                  Math.abs(timeBefore.from - timeAfter.from) < 1e-6 &&
+                  Math.abs(timeBefore.to - timeAfter.to) < 1e-6
+              };
+              scale.setAutoScale(true);
+              return result;
+            }""")
+            check("phone: vertical two-finger pinch zooms the price scale without changing the time scale",
+                  pinch["afterSpan"] is not None and pinch["afterSpan"] < pinch["beforeSpan"] and pinch["timeUnchanged"],
+                  str(pinch))
         page.locator('[data-testid="chart"]').evaluate("""el => {
             window.__drawingDebugEvents = [];
             for (const type of ["pointerdown", "pointerup", "click"]) {
