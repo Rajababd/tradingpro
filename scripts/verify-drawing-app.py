@@ -256,8 +256,8 @@ with sync_playwright() as p:
                 after_move = settings_panel.bounding_box()
                 check(f"{mode}: the top move handle repositions the drawing settings panel",
                       move_handle.count() == 1 and after_move is not None and
-                      abs(after_move["left"] - before_move["left"]) > 15 and
-                      abs(after_move["top"] - before_move["top"]) > 15,
+                      abs(after_move["x"] - before_move["x"]) > 15 and
+                      abs(after_move["y"] - before_move["y"]) > 15,
                       (before_move, after_move))
                 trend_panel_text = settings_panel.inner_text() if settings_panel.count() else ""
                 removed_trend_settings = ("نمط الخط", "لون التسمية", "خط التسمية", "إظهار التسميات",
