@@ -250,7 +250,7 @@ with sync_playwright() as p:
                 handle_box = move_handle.bounding_box()
                 page.mouse.move(handle_box["x"] + handle_box["width"] / 2, handle_box["y"] + handle_box["height"] / 2)
                 page.mouse.down()
-                page.mouse.move(handle_box["x"] + handle_box["width"] / 2 + 40, handle_box["y"] + handle_box["height"] / 2 + 36, steps=6)
+                page.mouse.move(handle_box["x"] + handle_box["width"] / 2 - 40, handle_box["y"] + handle_box["height"] / 2 - 36, steps=6)
                 page.mouse.up()
                 page.wait_for_timeout(100)
                 after_move = settings_panel.bounding_box()
