@@ -85,7 +85,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
   const panelPosition: CSSProperties | undefined = position ? {
     position: 'fixed',
     left: Math.max(8, Math.min(position.x + 24 + panelOffset.x, window.innerWidth - 286)),
-    top: Math.max(8, Math.min(position.y - 20 + panelOffset.y, window.innerHeight - Math.min(window.innerHeight * 0.52, 420) - 8)),
+    top: Math.max(8, Math.min(position.y - 20 + panelOffset.y, window.innerHeight - Math.min(window.innerHeight * 0.52, 360) - 8)),
     zIndex: 61,
   } : undefined;
 
