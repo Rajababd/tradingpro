@@ -184,8 +184,36 @@ with sync_playwright() as p:
                 check(f"{mode}: floating trigger opens drawing settings", settings_panel.is_visible())
                 panel_box = settings_panel.bounding_box()
                 check(f"{mode}: settings panel remains compact and does not cover the chart",
-                      panel_box is not None and panel_box["width"] <= 280 and panel_box["height"] < 520,
+                      panel_box is not None and panel_box["width"] <= 280 and panel_box["height"] <= 362,
                       str(panel_box))
+                panel_metrics = settings_panel.evaluate("""el => ({
+                    scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+                    overflowY: getComputedStyle(el).overflowY
+                })""")
+                check(f"{mode}: drawing settings scroll inside a compact fixed-height panel",
+                      panel_metrics["overflowY"] in ("auto", "scroll") and panel_metrics["clientHeight"] <= 362,
+                      str(panel_metrics))
+                if panel_metrics["scrollHeight"] > panel_metrics["clientHeight"]:
+                    page.mouse.move(panel_box["x"] + panel_box["width"] / 2, panel_box["y"] + panel_box["height"] - 30)
+                    page.mouse.wheel(0, 160)
+                    page.wait_for_timeout(120)
+                    scroll_after = settings_panel.evaluate("el => el.scrollTop")
+                    check(f"{mode}: dragging/scrolling the settings options moves the list without moving the chart",
+                          scroll_after > 0, str(scroll_after))
+                    settings_panel.evaluate("el => { el.scrollTop = 0; }")
+                move_handle = page.get_by_role("button", name="تحريك قائمة الإعدادات")
+                before_move = settings_panel.bounding_box()
+                page.mouse.move(before_move["x"] + before_move["width"] - 48, before_move["y"] + 18)
+                page.mouse.down()
+                page.mouse.move(before_move["x"] + before_move["width"] - 8, before_move["y"] + 54, steps=6)
+                page.mouse.up()
+                page.wait_for_timeout(100)
+                after_move = settings_panel.bounding_box()
+                check(f"{mode}: the top move handle repositions the drawing settings panel",
+                      move_handle.count() == 1 and after_move is not None and
+                      abs(after_move["left"] - before_move["left"]) > 15 and
+                      abs(after_move["top"] - before_move["top"]) > 15,
+                      (before_move, after_move))
                 trend_panel_text = settings_panel.inner_text() if settings_panel.count() else ""
                 removed_trend_settings = ("نمط الخط", "لون التسمية", "خط التسمية", "إظهار التسميات",
                                           "لون التعبئة", "شفافية التعبئة", "إظهار الشكل", "ترتيب الرسم")
@@ -397,18 +425,28 @@ with sync_playwright() as p:
         # A cleared drawing set must remain empty after debounce and reload.
         clear_button = page.get_by_role("button", name="Clear drawings")
         clear_button.click()
+        confirm_dialog = page.get_by_role("dialog", name="تأكيد حذف الرسومات")
+        check(f"{mode}: clear drawings asks for confirmation before deleting",
+              confirm_dialog.is_visible() and len(export_drawings()) > 0)
+        page.get_by_role("button", name="إغلاق نافذة التأكيد").click()
+        check(f"{mode}: closing the confirmation dialog cancels deletion",
+              confirm_dialog.count() == 0 and len(export_drawings()) > 0)
+        clear_button.click()
+        confirm_dialog = page.get_by_role("dialog", name="تأكيد حذف الرسومات")
+        check(f"{mode}: confirmation can be opened again", confirm_dialog.is_visible())
+        page.get_by_role("button", name="موافق").click()
         try:
             page.wait_for_function("window.__tradingpro.chart.drawings.export().length === 0", timeout=3000)
-            check(f"{mode}: clear drawings removes all drawings", len(export_drawings()) == 0)
+            check(f"{mode}: confirming clear removes all drawings", len(export_drawings()) == 0)
             page.wait_for_timeout(350)  # allow the debounced empty state to be persisted
             page.reload()
             page.get_by_role("button", name="تحديث البيانات").click()
             page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
             page.wait_for_timeout(400)  # allow asynchronous restoration to complete
-            check(f"{mode}: cleared drawings stay cleared after reload", len(export_drawings()) == 0,
+            check(f"{mode}: confirmed clear stays cleared after reload", len(export_drawings()) == 0,
                   f"restored={export_drawings()}")
         except Exception as error:
-            check(f"{mode}: cleared drawings stay cleared after reload", False, str(error))
+            check(f"{mode}: confirmed clear stays cleared after reload", False, str(error))
             print(f"DEBUG {mode}: drawings after clear/reload={export_drawings()}")
         check(f"{mode}: no browser exceptions", not errors, repr(errors))
         context.close()
