@@ -254,10 +254,12 @@ with sync_playwright() as p:
                 page.mouse.up()
                 page.wait_for_timeout(100)
                 after_move = settings_panel.bounding_box()
+                moved_on_screen = after_move is not None and (
+                    abs(after_move["x"] - before_move["x"]) > 15 or
+                    abs(after_move["y"] - before_move["y"]) > 15
+                )
                 check(f"{mode}: the top move handle repositions the drawing settings panel",
-                      move_handle.count() == 1 and after_move is not None and
-                      abs(after_move["x"] - before_move["x"]) > 15 and
-                      abs(after_move["y"] - before_move["y"]) > 15,
+                      move_handle.count() == 1 and moved_on_screen,
                       (before_move, after_move))
                 trend_panel_text = settings_panel.inner_text() if settings_panel.count() else ""
                 removed_trend_settings = ("نمط الخط", "لون التسمية", "خط التسمية", "إظهار التسميات",
