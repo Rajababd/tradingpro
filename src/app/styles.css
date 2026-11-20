@@ -682,7 +682,7 @@ body {
 .drawing-tools-shell { position: relative; display: flex; width: 100%; justify-content: center; }
 .drawing-settings-panel {
   position: absolute; z-index: 30; top: 0; left: calc(100% + 8px); width: min(270px, calc(100vw - 58px));
-  max-height: min(52vh, 420px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+  max-height: min(52vh, 360px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
   padding: 8px; border: 1px solid var(--c-rule); border-radius: 9px;
   background: var(--c-panel); color: var(--c-text); box-shadow: 0 8px 24px rgba(0,0,0,.4);
 }
