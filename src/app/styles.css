@@ -731,7 +731,8 @@ body {
 .drawing-settings-panel {
   position: fixed;
   width: min(270px, calc(100vw - 16px));
-  max-height: min(52vh, 420px);
+  height: min(52vh, 360px);
+  max-height: calc(100vh - 16px);
 }
 
 /* Crosshair values: SMA on a dedicated line below price OHLC, indicator values inside their own pane. */
