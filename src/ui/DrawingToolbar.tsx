@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { DrawingController } from '../chart/DrawingController';
 
@@ -42,6 +42,10 @@ function FloatingButton({ position, onClick }: {
 export function DrawingToolbar({ controller }: { controller: DrawingController | null }) {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
+  const panelRef = useRef<HTMLElement | null>(null);
+  const panelDrag = useRef<{ pointerId: number; startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
   const [, setRevision] = useState(0);
 
   useEffect(() => {
@@ -80,8 +84,8 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
 
   const panelPosition: CSSProperties | undefined = position ? {
     position: 'fixed',
-    left: Math.max(8, Math.min(position.x + 24, window.innerWidth - 286)),
-    top: Math.max(8, Math.min(position.y - 20, window.innerHeight - 360)),
+    left: Math.max(8, Math.min(position.x + 24 + panelOffset.x, window.innerWidth - 286)),
+    top: Math.max(8, Math.min(position.y - 20 + panelOffset.y, window.innerHeight - Math.min(window.innerHeight * 0.52, 420) - 8)),
     zIndex: 61,
   } : undefined;
 
@@ -112,7 +116,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
             </button>
           )}
           <span className="toolbar-divider" aria-hidden="true" />
-          <button type="button" className="drawing-tool-button" aria-label="Clear drawings" title="Clear drawings" disabled={controller === null} onClick={() => controller?.clear()}>
+          <button type="button" className="drawing-tool-button" aria-label="Clear drawings" title="Clear drawings" disabled={controller === null} onClick={() => setConfirmClearOpen(true)}>
             <span aria-hidden="true">⌫</span>
           </button>
       </div>
@@ -123,6 +127,7 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
 
       {settingsOpen && selected && controller && panelPosition && (
         <section
+          ref={panelRef}
           className="drawing-settings-panel"
           style={panelPosition}
           aria-label={`إعدادات ${TOOL_LABELS[selected.type] ?? selected.type}`}
@@ -130,7 +135,23 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
         >
           <header className="drawing-settings-header">
             <strong>إعدادات {TOOL_LABELS[selected.type] ?? selected.type}</strong>
-            <button type="button" className="drawing-settings-close" aria-label="إغلاق الإعدادات" onClick={() => setSettingsOpen(false)}>×</button>
+            <div className="drawing-settings-header-actions">
+              <button type="button" className="drawing-settings-move" aria-label="تحريك قائمة الإعدادات" title="اسحب لتحريك القائمة"
+                onPointerDown={(event) => {
+                  if (panelRef.current === null) return;
+                  event.preventDefault(); event.stopPropagation();
+                  panelDrag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, offsetX: panelOffset.x, offsetY: panelOffset.y };
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  const drag = panelDrag.current;
+                  if (drag === null || drag.pointerId !== event.pointerId) return;
+                  setPanelOffset({ x: drag.offsetX + event.clientX - drag.startX, y: drag.offsetY + event.clientY - drag.startY });
+                }}
+                onPointerUp={(event) => { if (panelDrag.current?.pointerId === event.pointerId) panelDrag.current = null; }}
+                onPointerCancel={() => { panelDrag.current = null; }}>⠿</button>
+              <button type="button" className="drawing-settings-close" aria-label="إغلاق الإعدادات" onClick={() => setSettingsOpen(false)}>×</button>
+            </div>
           </header>
 
           <div className="drawing-settings-body">
@@ -237,6 +258,19 @@ export function DrawingToolbar({ controller }: { controller: DrawingController |
             }}>حذف الشكل المرسوم</button>
           </div>
         </section>
+      )}
+
+      {confirmClearOpen && controller && (
+        <div className="drawing-confirm-backdrop" role="presentation" onClick={() => setConfirmClearOpen(false)}>
+          <section className="drawing-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="drawing-confirm-title" onClick={(event) => event.stopPropagation()}>
+            <header className="drawing-confirm-header">
+              <strong id="drawing-confirm-title">تأكيد حذف الرسومات</strong>
+              <button type="button" className="drawing-confirm-close" aria-label="إغلاق نافذة التأكيد" onClick={() => setConfirmClearOpen(false)}>×</button>
+            </header>
+            <p>هل أنت متأكد من حذف جميع الرسومات؟ لا يمكن التراجع عن هذه العملية.</p>
+            <button type="button" className="drawing-confirm-accept" onClick={() => { controller.clear(); setConfirmClearOpen(false); }}>موافق</button>
+          </section>
+        </div>
       )}
     </>
   );
