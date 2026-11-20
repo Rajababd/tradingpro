@@ -682,7 +682,7 @@ body {
 .drawing-tools-shell { position: relative; display: flex; width: 100%; justify-content: center; }
 .drawing-settings-panel {
   position: absolute; z-index: 30; top: 0; left: calc(100% + 8px); width: min(270px, calc(100vw - 58px));
-  max-height: min(78vh, 620px); overflow-y: auto; overscroll-behavior: contain;
+  max-height: min(52vh, 420px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
   padding: 8px; border: 1px solid var(--c-rule); border-radius: 9px;
   background: var(--c-panel); color: var(--c-text); box-shadow: 0 8px 24px rgba(0,0,0,.4);
 }
@@ -731,7 +731,7 @@ body {
 .drawing-settings-panel {
   position: fixed;
   width: min(270px, calc(100vw - 16px));
-  max-height: min(70vh, 520px);
+  max-height: min(52vh, 420px);
 }
 
 /* Crosshair values: SMA on a dedicated line below price OHLC, indicator values inside their own pane. */
@@ -769,3 +769,20 @@ body {
 .chart-style-row input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--c-accent); }
 .chart-style-row input[type='range'] { width: 110px; accent-color: var(--c-accent); }
 .chart-style-row output { min-width: 42px; color: var(--c-text); text-align: end; font-variant-numeric: tabular-nums; }
+
+
+/* Compact, touch-scrollable drawing settings with a dedicated move handle. */
+.drawing-settings-header-actions { display: flex; align-items: center; gap: 4px; }
+.drawing-settings-move { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--c-rule); border-radius: 6px; background: transparent; color: var(--c-muted); font-size: 19px; cursor: grab; touch-action: none; user-select: none; }
+.drawing-settings-move:active { cursor: grabbing; color: var(--c-accent); }
+.drawing-settings-move:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+/* Confirmation before clearing every drawing. */
+.drawing-confirm-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.62); }
+.drawing-confirm-dialog { width: min(360px, 100%); padding: 14px; border: 1px solid var(--c-rule); border-radius: 12px; background: var(--c-panel); color: var(--c-text); box-shadow: 0 16px 48px rgba(0,0,0,.5); }
+.drawing-confirm-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.drawing-confirm-header strong { font-size: 14px; }
+.drawing-confirm-close { width: 34px; height: 34px; border: 0; border-radius: 6px; background: transparent; color: var(--c-muted); font-size: 22px; cursor: pointer; }
+.drawing-confirm-dialog p { margin: 10px 0 16px; color: var(--c-muted); font-size: 13px; line-height: 1.6; }
+.drawing-confirm-accept { width: 100%; min-height: 42px; border: 1px solid var(--c-danger); border-radius: 7px; background: color-mix(in srgb, var(--c-danger) 14%, transparent); color: var(--c-danger); font: inherit; font-weight: 700; cursor: pointer; }
+.drawing-confirm-close:focus-visible, .drawing-confirm-accept:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
