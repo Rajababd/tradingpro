@@ -170,7 +170,7 @@ with sync_playwright() as p:
     ev(f"""() => {{ const times = {T}.engine.times; window.__paneDrawing = {T}.chart.drawings.create('trend-line', 'pane-rsi-persistence', 'rsi:rsi', [{{ time: times[30], price: 50 }}, {{ time: times[60], price: 60 }}]); }}""")
     check("M3 a drawing on the RSI pane is initially attached", ev("window.__paneDrawing.isAttached()"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
-    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.paneCount") == 1 and ev(f"{T}.chart.paneSeriesCounts") == [2] and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
+    check("M3 turning RSI off removes its series and deletes the empty pane", ev("__h.paneRows().length") == 1 and ev(f"{T}.chart.paneCount") == 1 and ev(f"{T}.chart.paneSeriesCounts") == [3] and not ev(f"{T}.chart.series.has('rsi:rsi')") and ev(f"{T}.engine.has('rsi')") and not ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"))
     switch("data-indicator", "rsi").click(); page.wait_for_timeout(150)
     Hs = ev("__h.paneRows()")
     check("M3 showing RSI again creates a fresh pane, restores cached values and reattaches its drawing", ev("__h.paneRows().length") == 2 and Hs[1] > 40 and ev(f"{T}.chart.series.has('rsi:rsi')") and ev("window.__paneDrawing.isAttached()") and ev(f"{T}.chart.drawings.export().some((d) => d.id === 'pane-rsi-persistence')"), Hs)

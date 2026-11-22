@@ -218,6 +218,7 @@ export class ChartController {
         wickVisible: false, borderVisible: true, borderUpColor: '#26a69a', borderDownColor: '#ef5350',
         priceLineVisible: false, lastValueVisible: false, priceScaleId: 'right', zOrder: 'top',
       } as never, PRICE_PANE_INDEX);
+      panes.noteSeriesAdded(PRICE_PANE_ID); // keep pane bookkeeping aligned with the internal overlay series
       this.#visibility = visibility;
       this.#panes = panes;
       this.#series = series;
