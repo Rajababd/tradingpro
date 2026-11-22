@@ -1,2 +1,88 @@
-      date: '2026-01-01', open: 10, high: 11, low: 9, close: 11, volume: 100, valueTraded: 1000,
+import { describe, expect, it } from 'vitest';
+import { validateDrawingBackup, validateMarketDatabase } from '../src/data/BackupFormat';
+import { parseTabularRows, parseWorkbookBuffer } from '../src/data/SpreadsheetImport';
+import * as XLSX from 'xlsx';
+
+describe('portable backup formats', () => {
+  it('validates and preserves the exported market database format', () => {
+    const backup = validateMarketDatabase({
+      format: 'tradingpro-market-database', version: 1, exportedAt: '2026-11-04T00:00:00.000Z',
+      symbols: { BBSY: [{ date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000 }] },
+    });
+    expect(backup.symbols.BBSY).toHaveLength(1);
+    const withReference = validateMarketDatabase({ format: 'tradingpro-market-database', version: 1, symbols: { BBSY: [{ date: '2026-01-02', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000, referencePrice: 10.5 }] } });
+    expect(withReference.symbols.BBSY?.[0]?.referencePrice).toBe(10.5);
+    expect(() => validateMarketDatabase({
+      format: 'tradingpro-market-database', version: 1,
+      symbols: { BBSY: [
+        { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: null, valueTraded: null },
+        { date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: null, valueTraded: null },
+      ] },
+    })).toThrow(/تاريخ مكرر/);
+  });
+
+  it('rejects an empty market database so replace cannot wipe existing candles', () => {
+    expect(() => validateMarketDatabase({
+      format: 'tradingpro-market-database', version: 1,
+      symbols: { DWX: [], AVOC: [], ABC: [], BBSY: [], NIB: [], AHT: [] },
+    })).toThrow(/شموع صالحة/);
+  });
+
+  it('validates drawing groups by symbol, timeframe and drawing structure', () => {
+    const backup = validateDrawingBackup({
+      format: 'tradingpro-drawings', version: 1, drawings: [{
+        symbol: 'BBSY', timeframe: '1D', items: [{
+          id: 'trend-1', type: 'trend-line', paneIndex: 0, seriesId: 'price',
+          anchors: [{ time: 1700000000, price: 10 }, { time: 1700001000, price: 12 }],
+        }],
+      }],
+    });
+    expect(backup.drawings[0]?.items).toHaveLength(1);
+    expect(() => validateDrawingBackup({ format: 'tradingpro-drawings', version: 9, drawings: [] })).toThrow();
+  });
+
+  it('imports tabular Excel/CSV rows with either a symbol column or symbol-named sheet', () => {
+    const rows = parseTabularRows([
+      ['Symbol', 'Date', 'Open', 'High', 'Low', 'Close', 'Volume Traded', 'Value Traded', 'Reference Price'],
+      ['BBSY', '2026-01-01', '10', '8', '9', '11', '100', '1000', '10.5'],
+    ]);
+    expect(rows.BBSY).toEqual([{
+      date: '2026-01-01', open: 10, high: 11, low: 9, close: 11, volume: 100, valueTraded: 1000, referencePrice: 10.5,
     }]);
+    const namedSheet = parseTabularRows([
+      ['Date', 'Open', 'High', 'Low', 'Close'],
+      ['2026-01-02', 11, 13, 10, 12],
+    ], 'ABC');
+    expect(namedSheet.ABC).toHaveLength(1);
+  });
+
+  it('imports the supplied BBSY Arabic spreadsheet layout using the filename as the symbol', () => {
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['التاريخ', 'إفتتاح', 'أعلى', 'أدنى', 'الإغلاق', 'التغير %', 'حجم التداول'],
+      ['2014-11-10', 1.33, 1.33, 1.33, 1.33, 32.5, 10555],
+      ['2014-11-11', 1.39, 1.39, 1.34, 1.39, 4.68, 33424],
+    ]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Security Prices');
+    const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+    const imported = parseWorkbookBuffer(bytes, 'BBSY Al Baraka Bank - Syria 2010-01-01 to 2026-01-04.xlsx');
+    expect(imported.BBSY).toEqual([
+      { date: '2014-11-10', open: 1.33, high: 1.33, low: 1.33, close: 1.33, volume: 10555, valueTraded: null },
+      { date: '2014-11-11', open: 1.39, high: 1.39, low: 1.34, close: 1.39, volume: 33424, valueTraded: null },
+    ]);
+  });
+
+  it.each(['xls', 'xlsx', 'xlsm', 'xlsb'] as const)('imports %s workbooks with date cells and symbol-named sheets', (bookType) => {
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['Date', 'Open', 'High', 'Low', 'Close', 'Volume Traded', 'Value Traded'],
+      [new Date('2026-03-17T00:00:00.000Z'), 10, 12, 9, 11, 120, 1320],
+    ]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'BBSY');
+    const bytes = XLSX.write(workbook, { bookType, type: 'array', cellDates: true }) as ArrayBuffer;
+    const imported = parseWorkbookBuffer(bytes);
+    expect(imported.BBSY).toEqual([{
+      date: '2026-03-17', open: 10, high: 12, low: 9, close: 11, volume: 120, valueTraded: 1320,
+    }]);
+  });
+});
