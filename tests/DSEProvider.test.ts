@@ -26,6 +26,17 @@ describe('DSEProvider', () => {
     );
   });
 
+  it('parses reference_price and refreshes it for an existing date without replacing OHLC', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value); } } });
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ date: '2026-01-26', open: '10', high: '12', low: '9', close: '11', volume_traded: '100', reference_price: '10.5' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ date: '2026-01-26', open: '10', high: '12', low: '9', close: '11', volume_traded: '100', reference_price: '10.8' }]), { status: 200 })));
+    const provider = new DSEProvider();
+    expect((await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true }))[0]).toMatchObject({ referencePrice: 10.5 });
+    expect((await provider.fetchHistorical({ symbol: 'BBSY', timeframe: '1D', refresh: true }))[0]).toMatchObject({ open: 10, close: 11, referencePrice: 10.8 });
+  });
+
   it('aggregates daily sessions into weekly OHLC candles and sums turnover', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(dailyRows), { status: 200 })));
     const bars = await new DSEProvider().fetchHistorical({ symbol: 'BBSY', timeframe: '1W', refresh: true });

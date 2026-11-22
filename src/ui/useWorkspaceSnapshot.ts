@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { IndicatorWorkspace, WorkspaceSnapshot } from '../indicators/IndicatorWorkspace';
 
-export const EMPTY_WORKSPACE: WorkspaceSnapshot = { indicators: [], smas: [] };
+export const EMPTY_WORKSPACE: WorkspaceSnapshot = { indicators: [], smas: [], calculationMode: 'traditional' };
 const NO_SUBSCRIPTION = () => () => {};
 
 /** Subscribes React to the workspace's snapshots (stable between changes). */

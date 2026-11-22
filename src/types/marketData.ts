@@ -13,6 +13,10 @@ export interface Candle {
   readonly volume: number | null;
   /** Total traded value for the period, when supplied by the source. */
   readonly valueTraded?: number | null;
+  /** DSE reference price used for reference-based candle direction and indicator calculations. */
+  readonly referencePrice?: number | null;
+  /** Internal indicator calculation context; market-data candles do not set this field. */
+  readonly indicatorMode?: 'traditional' | 'reference';
 }
 
 /** DSE daily bars can be aggregated into calendar weeks and months by the provider. */

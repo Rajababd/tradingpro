@@ -37,6 +37,8 @@ export function validateCandle(raw: unknown): CandleValidation {
     return fail('INVALID_OHLC_RELATION', 'high must be >= open, close and low; low must be <= open, close and high.');
   }
   const { volume, valueTraded } = r;
+  const referencePrice = r.referencePrice === undefined || r.referencePrice === null ? null : r.referencePrice;
+  if (referencePrice !== null && (!isFiniteNumber(referencePrice) || referencePrice <= 0)) return fail('INVALID_PRICE', 'referencePrice must be a finite number > 0 when present.');
   let normalizedVolume: number | null;
   if (volume === undefined || volume === null) normalizedVolume = null;
   else if (isFiniteNumber(volume) && volume >= 0) normalizedVolume = volume;
@@ -51,6 +53,7 @@ export function validateCandle(raw: unknown): CandleValidation {
     candle: {
       time: time as UnixSeconds, open, high, low, close, volume: normalizedVolume,
       ...(normalizedValueTraded === undefined ? {} : { valueTraded: normalizedValueTraded }),
+      ...(referencePrice === null ? {} : { referencePrice }),
     },
   };
 }

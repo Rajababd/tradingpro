@@ -4,7 +4,7 @@ import { DSE_SYMBOLS } from './DSEProvider';
 export const BACKUP_VERSION = 1 as const;
 export type BackupCandle = {
   date: string; open: number; high: number; low: number; close: number;
-  volume: number | null; valueTraded: number | null;
+  volume: number | null; valueTraded: number | null; referencePrice?: number | null;
 };
 export type MarketDatabaseBackup = {
   format: 'tradingpro-market-database'; version: typeof BACKUP_VERSION;
@@ -31,9 +31,11 @@ export function validateBackupCandle(value: unknown): BackupCandle | null {
       value.high < Math.max(value.open, value.close, value.low) ||
       value.low > Math.min(value.open, value.close, value.high) ||
       !(value.volume === null || (finite(value.volume) && value.volume >= 0)) ||
-      !(value.valueTraded === null || (finite(value.valueTraded) && value.valueTraded >= 0))) return null;
+      !(value.valueTraded === null || (finite(value.valueTraded) && value.valueTraded >= 0)) ||
+      !(value.referencePrice === undefined || value.referencePrice === null || (finite(value.referencePrice) && value.referencePrice > 0))) return null;
   return { date: value.date, open: value.open, high: value.high, low: value.low, close: value.close,
-    volume: value.volume, valueTraded: value.valueTraded };
+    volume: value.volume, valueTraded: value.valueTraded,
+    ...(value.referencePrice === undefined || value.referencePrice === null ? {} : { referencePrice: value.referencePrice }) };
 }
 
 export function validateMarketDatabase(value: unknown): MarketDatabaseBackup {

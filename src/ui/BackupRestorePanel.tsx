@@ -68,8 +68,8 @@ export function BackupRestorePanel({ provider, controller, symbol, timeframe, on
     let drawingBackup: unknown;
     if (exportMarket) {
       const symbols = Object.fromEntries(Object.entries(provider.exportDatabase()).map(([key, rows]) => [
-        key, rows.map(({ date, open, high, low, close, volume, valueTraded }) =>
-          ({ date, open, high, low, close, volume, valueTraded })),
+        key, rows.map(({ date, open, high, low, close, volume, valueTraded, referencePrice }) =>
+          ({ date, open, high, low, close, volume, valueTraded, ...(referencePrice == null ? {} : { referencePrice }) })),
       ]));
       marketBackup = { format: 'tradingpro-market-database', version: BACKUP_VERSION, exportedAt, symbols };
     }

@@ -40,7 +40,7 @@ with sync_playwright() as p:
     page.goto(URL)
     page.get_by_role("button", name="تحديث البيانات").click()
     page.wait_for_function("window.__tradingpro?.service.getState().status === 'ready' && window.__tradingpro.service.candles.length > 0", timeout=30000)
-    page.locator(".topbar select").select_option("BBSY")
+    page.locator(".topbar .market-select-label select").select_option("BBSY")
     page.wait_for_function("window.__tradingpro?.service.getState().status === 'ready' && window.__tradingpro.service.candles.length > 0", timeout=10000)
 
     # Export both datasets together and validate the combined backup.

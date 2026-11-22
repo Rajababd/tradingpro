@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({ chart: null as unknown }));
 vi.mock('lightweight-charts', () => ({
   createChart: vi.fn(() => h.chart),
   CandlestickSeries: { type: 'Candlestick' },
+  LineSeries: { type: 'Line' },
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
   TrackingModeExitMode: { OnTouchEnd: 0 },
@@ -32,17 +33,31 @@ describe('ChartController managers', () => {
     expect(() => controller.series).toThrow(/not mounted/);
     expect(() => controller.crosshair).toThrow(/not mounted/);
     controller.mount(container);
-    expect(controller.series.list()).toEqual([{ id: 'price', paneId: 'price', type: 'Candlestick', visible: true }]);
+    expect(controller.series.list()).toEqual([
+      { id: 'price', paneId: 'price', type: 'Candlestick', visible: true },
+      { id: 'price-line', paneId: 'price', type: 'Line', visible: false },
+    ]);
     expect(controller.panes.order).toEqual(['price']);
     controller.dispose();
     expect(() => controller.series).toThrow(/not mounted/);
     expect(() => controller.viewport).toThrow(/not mounted/);
   });
 
-  it('creates exactly one price series at mount and protects it from removal', () => {
+  it('creates the managed price series plus the internal reference overlay and protects the base series', () => {
     controller.mount(container);
-    expect(fake.addSeries).toHaveBeenCalledTimes(1);
+    expect(fake.addSeries).toHaveBeenCalledTimes(3);
     expect(() => controller.visibility.removeSeries('price')).toThrow(/protected/);
+  });
+
+  it('switches the price pane between candlesticks and the close-price line', () => {
+    controller.mount(container);
+    controller.setPriceChartType('line');
+    expect(controller.priceChartType).toBe('line');
+    expect(controller.series.list().find((item) => item.id === 'price')?.visible).toBe(false);
+    expect(controller.series.list().find((item) => item.id === 'price-line')?.visible).toBe(true);
+    controller.setPriceChartType('candles');
+    expect(controller.series.list().find((item) => item.id === 'price')?.visible).toBe(true);
+    expect(controller.series.list().find((item) => item.id === 'price-line')?.visible).toBe(false);
   });
 
   it('indicator series share the one chart: no second chart, no duplicate price series', () => {
@@ -50,7 +65,7 @@ describe('ChartController managers', () => {
     controller.mount(container); // idempotent
     controller.visibility.addSeries({ id: 'rsi', definition: def('Line'), paneId: 'rsi' });
     expect(fake.paneGroups).toHaveLength(2);
-    expect(fake.addSeries).toHaveBeenCalledTimes(2);
+    expect(fake.addSeries).toHaveBeenCalledTimes(4);
   });
 
   it('dispose detaches crosshair and viewport subscriptions before removing the chart', () => {
@@ -102,7 +117,7 @@ describe('ChartController managers', () => {
       const api = priceSeries();
       controller.updateCandle(candle(3, 1.7));
       expect(api.update).toHaveBeenCalledTimes(1);
-      expect(api.update).toHaveBeenCalledWith({ time: 1704067200 + 3 * 86400, open: 1, high: 2, low: 0.5, close: 1.7 });
+      expect(api.update).toHaveBeenCalledWith({ time: 1704067200 + 3 * 86400, open: 1, high: 2, low: 0.5, close: 1.7, borderColor: '#26a69a' });
       expect(api.setData).not.toHaveBeenCalled();
       expect(fake.fitContent).not.toHaveBeenCalled();
       expect(fake.timeScaleMock.setVisibleLogicalRange).not.toHaveBeenCalled();

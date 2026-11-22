@@ -6,7 +6,7 @@ import { theme } from '../src/app/theme';
 // These tests verify ChartController's own lifecycle logic against a mocked chart library.
 // They do NOT prove rendering; that is verified separately in a real browser.
 const mocks = vi.hoisted(() => {
-  const series = { setData: vi.fn() };
+  const series = { setData: vi.fn(), applyOptions: vi.fn() };
   const timeScale = {
     fitContent: vi.fn(),
     getVisibleLogicalRange: vi.fn(() => ({ from: 1, to: 5 })),
@@ -29,16 +29,18 @@ const mocks = vi.hoisted(() => {
 vi.mock('lightweight-charts', () => ({
   createChart: mocks.createChart,
   CandlestickSeries: { type: 'Candlestick' },
+  LineSeries: { type: 'Line' },
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
   TrackingModeExitMode: { OnTouchEnd: 0, OnNextTap: 1 },
 }));
 
-import { ChartController, PRICE_PANE_INDEX } from '../src/chart/ChartController';
+import { ChartController, PRICE_PANE_INDEX, getAdjustedReferencePrice } from '../src/chart/ChartController';
 
 const candle = (time: number, close = 11): Candle => ({
   time: time as UnixSeconds,
   open: 10,
+  referencePrice: 1050,
   high: 12,
   low: 9,
   close,
@@ -50,11 +52,11 @@ beforeEach(() => {
 });
 
 describe('ChartController', () => {
-  it('creates one chart and one candlestick series in the price pane on mount', () => {
+  it('creates the base price series, close line and reference overlay in the price pane', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(3);
     expect(mocks.chart.addSeries.mock.calls[0]?.[2]).toBe(PRICE_PANE_INDEX);
     expect(c.isMounted).toBe(true);
   });
@@ -77,7 +79,7 @@ describe('ChartController', () => {
     c.mount(el);
     c.mount(el);
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(3);
   });
 
   it('refuses to mount to a different container while mounted', () => {
@@ -87,15 +89,62 @@ describe('ChartController', () => {
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
   });
 
-  it('maps candles to chart data (time in seconds, OHLC only) and fits content', () => {
+  it('defaults to combined mode: opening candles are outlined and reference candles are filled', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     c.setCandles([candle(100, 11), candle(200, 12)]);
-    expect(mocks.series.setData).toHaveBeenCalledWith([
-      { time: 100, open: 10, high: 12, low: 9, close: 11 },
-      { time: 200, open: 10, high: 12, low: 9, close: 12 },
+    expect(c.candleDisplayMode).toBe('both');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(1, [
+      { time: 100, open: 10, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+      { time: 200, open: 10, high: 12, low: 9, close: 12, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(2, [
+      { time: 100, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+      { time: 200, open: 10.5, high: 12, low: 9, close: 12, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(3, [
+      { time: 100, value: 11 }, { time: 200, value: 12 },
     ]);
     expect(mocks.timeScale.fitContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches between opening-only, reference-only and combined candle data', () => {
+    const c = new ChartController(theme);
+    c.mount(document.createElement('div'));
+    c.setCandles([candle(100, 9), candle(200, 11)]);
+
+    c.setCandleDisplayMode('opening');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(4, [
+      { time: 100, open: 10, high: 12, low: 9, close: 9 },
+      { time: 200, open: 10, high: 12, low: 9, close: 11 },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(5, []);
+
+    c.setCandleDisplayMode('reference');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(6, [
+      { time: 100, open: 10.5, high: 12, low: 9, close: 9, borderColor: '#ef5350' },
+      { time: 200, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(7, []);
+
+    c.setCandleDisplayMode('both');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(8, [
+      { time: 100, open: 10, high: 12, low: 9, close: 9, borderColor: '#ef5350' },
+      { time: 200, open: 10, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(9, [
+      { time: 100, open: 10.5, high: 12, low: 9, close: 9, borderColor: '#ef5350' },
+      { time: 200, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+    ]);
+  });
+
+  it('adjusts reference price only before 2026-01-04', () => {
+    const before = { ...candle(0), time: (Date.parse('2026-01-03T00:00:00Z') / 1000) as UnixSeconds, referencePrice: 12508 };
+    const boundary = { ...candle(0), time: (Date.parse('2026-01-04T00:00:00Z') / 1000) as UnixSeconds, referencePrice: 125.08 };
+    const after = { ...candle(0), time: (Date.parse('2026-01-05T00:00:00Z') / 1000) as UnixSeconds, referencePrice: 125.08 };
+    expect(getAdjustedReferencePrice(before)).toBeCloseTo(125.08);
+    expect(getAdjustedReferencePrice(boundary)).toBe(125.08);
+    expect(getAdjustedReferencePrice(after)).toBe(125.08);
   });
 
   it('replaces data in place on repeated setCandles without creating series', () => {
@@ -103,8 +152,8 @@ describe('ChartController', () => {
     c.mount(document.createElement('div'));
     c.setCandles([candle(100)]);
     c.setCandles([candle(100), candle(200)]);
-    expect(mocks.series.setData).toHaveBeenCalledTimes(2);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.series.setData).toHaveBeenCalledTimes(6);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(3);
   });
 
   it('rebases drawing anchors by timestamp and shifts the viewport when older candles are prepended', () => {

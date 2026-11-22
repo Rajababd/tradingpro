@@ -14,6 +14,7 @@ const aliases: Record<string, string[]> = {
   close: ['close', 'closeprice', 'close_val', 'السعر', 'الاغلاق', 'الإغلاق'],
   volume: ['volume', 'volume_traded', 'traded_volume', 'الحجم', 'الكمية', 'حجم التداول', 'كمية التداول'],
   valueTraded: ['valuetraded', 'value_traded', 'traded_value', 'turnover', 'قيمةالتداول'],
+  referencePrice: ['reference_price', 'referenceprice', 'السعر المرجعي', 'السعرالمرجعي'],
 };
 const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\s_\-]/g, '').replace(/[\u0622\u0623\u0625]/g, 'ا');
 const fieldFor = (value: unknown) => Object.entries(aliases).find(([, names]) => names.some((name) => norm(name) === norm(value)))?.[0];
@@ -47,11 +48,12 @@ function normalizeRow(row: Record<string, unknown>, symbol: string): BackupCandl
   const open = number(row.open), high = number(row.high), low = number(row.low), close = number(row.close);
   const volume = row.volume === undefined || row.volume === '' ? null : number(row.volume);
   const valueTraded = row.valueTraded === undefined || row.valueTraded === '' ? null : number(row.valueTraded);
+  const referencePrice = row.referencePrice === undefined || row.referencePrice === '' ? null : number(row.referencePrice);
   if (!isKnownSymbol(symbol) || !date || open === null || high === null || low === null || close === null ||
       open <= 0 || high <= 0 || low <= 0 || close <= 0 ||
-      (volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
+      (volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0) || (referencePrice !== null && referencePrice <= 0)) return null;
   return { date, open, high: Math.max(high, open, close), low: Math.min(low, open, close),
-    close, volume, valueTraded };
+    close, volume, valueTraded, ...(referencePrice === null ? {} : { referencePrice }) };
 }
 function addRows(out: ImportedMarketRows, rows: Record<string, unknown>[], sheetSymbol?: string) {
   if (!rows.length) return;

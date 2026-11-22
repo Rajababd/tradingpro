@@ -74,6 +74,23 @@ describe('CrosshairController', () => {
     expect(received).toEqual([]);
   });
 
+  it('includes numeric indicator values from the hovered pane and can read OHLC when the candle series is hidden', () => {
+    const chart = new FakeChart();
+    const price = { id: 'price-series' } as never;
+    const rsi = { id: 'rsi-series' } as never;
+    const controller = new CrosshairController(
+      chart.asPort(),
+      () => price,
+      () => [{ id: 'rsi:rsi', paneIndex: 1, api: rsi }],
+      (time) => time === 5 ? { open: 1, high: 3, low: 0.5, close: 2 } : null,
+    );
+    const received: CrosshairSnapshot[] = [];
+    controller.subscribe((snapshot) => received.push(snapshot));
+    chart.emitCrosshair({ time: 5, logical: 2, paneIndex: 1, seriesData: new Map([[rsi, { time: 5, value: 44.5 }]]) });
+    expect(received[0]?.candle).toEqual({ open: 1, high: 3, low: 0.5, close: 2 });
+    expect(received[0]?.seriesValues).toEqual([{ id: 'rsi:rsi', paneIndex: 1, value: 44.5 }]);
+  });
+
   it('survives a missing price series', () => {
     const chart = new FakeChart();
     const controller = new CrosshairController(chart.asPort(), () => undefined);

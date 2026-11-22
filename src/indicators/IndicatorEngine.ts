@@ -102,12 +102,27 @@ export class IndicatorEngine {
   readonly #times: UnixSeconds[] = [];
   readonly #instances = new Map<string, Instance>();
   readonly #changes = new EventChannel<IndicatorChange>();
+  #calculationMode: 'traditional' | 'reference' = 'traditional';
 
   constructor(readonly registry: IndicatorRegistry = createDefaultRegistry()) {}
 
   get length(): number {
     return this.#candles.length;
   }
+
+  get calculationMode(): 'traditional' | 'reference' { return this.#calculationMode; }
+
+  /** Switch calculation context and recompute all cached indicators and dependent SMAs. */
+  setCalculationMode(mode: 'traditional' | 'reference'): void {
+    if (mode === this.#calculationMode) return;
+    this.#calculationMode = mode;
+    for (let i = 0; i < this.#candles.length; i++) this.#candles[i] = this.#withMode(this.#candles[i]!);
+    for (const inst of this.#instances.values()) if (inst.kind === 'indicator') inst.calc.reset(this.#candles);
+    for (const inst of this.#instances.values()) if (inst.kind === 'sma') inst.calc.reset(this.#sourceColumn(inst.source));
+    for (const id of this.#instances.keys()) this.#changes.emit({ type: 'reset', instanceId: id });
+  }
+
+  #withMode(candle: Candle): Candle { return { ...candle, indicatorMode: this.#calculationMode }; }
 
   /** The candles the outputs are computed from (needed e.g. to colour volume bars by direction). Live view: do not mutate. */
   get candles(): readonly Candle[] {
@@ -219,7 +234,7 @@ export class IndicatorEngine {
       }
     }
     this.#candles.length = 0;
-    this.#candles.push(...candles);
+    this.#candles.push(...candles.map((candle) => this.#withMode(candle)));
     this.#times.length = 0;
     this.#times.push(...candles.map((c) => c.time));
 
@@ -242,9 +257,10 @@ export class IndicatorEngine {
     if (last !== undefined && candle.time <= last.time) {
       throw new IndicatorSyncError(`Cannot append a bar at ${candle.time}: the latest bar is at ${last.time}.`);
     }
-    this.#candles.push(candle);
-    this.#times.push(candle.time);
-    this.#advance(candle, 'append');
+    const enriched = this.#withMode(candle);
+    this.#candles.push(enriched);
+    this.#times.push(enriched.time);
+    this.#advance(enriched, 'append');
   }
 
   /** New values for the latest bar (a live tick). */
@@ -254,8 +270,9 @@ export class IndicatorEngine {
     if (candle.time !== last.time) {
       throw new IndicatorSyncError(`Cannot update the bar at ${candle.time}: the latest bar is at ${last.time}.`);
     }
-    this.#candles[this.#candles.length - 1] = candle;
-    this.#advance(candle, 'update');
+    const enriched = this.#withMode(candle);
+    this.#candles[this.#candles.length - 1] = enriched;
+    this.#advance(enriched, 'update');
   }
 
   // ---- internals -------------------------------------------------------------------------------

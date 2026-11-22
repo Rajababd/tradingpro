@@ -10,6 +10,8 @@ describe('portable backup formats', () => {
       symbols: { BBSY: [{ date: '2026-01-01', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000 }] },
     });
     expect(backup.symbols.BBSY).toHaveLength(1);
+    const withReference = validateMarketDatabase({ format: 'tradingpro-market-database', version: 1, symbols: { BBSY: [{ date: '2026-01-02', open: 10, high: 12, low: 9, close: 11, volume: 100, valueTraded: 1000, referencePrice: 10.5 }] } });
+    expect(withReference.symbols.BBSY?.[0]?.referencePrice).toBe(10.5);
     expect(() => validateMarketDatabase({
       format: 'tradingpro-market-database', version: 1,
       symbols: { BBSY: [
@@ -41,11 +43,11 @@ describe('portable backup formats', () => {
 
   it('imports tabular Excel/CSV rows with either a symbol column or symbol-named sheet', () => {
     const rows = parseTabularRows([
-      ['Symbol', 'Date', 'Open', 'High', 'Low', 'Close', 'Volume Traded', 'Value Traded'],
-      ['BBSY', '2026-01-01', '10', '8', '9', '11', '100', '1000'],
+      ['Symbol', 'Date', 'Open', 'High', 'Low', 'Close', 'Volume Traded', 'Value Traded', 'Reference Price'],
+      ['BBSY', '2026-01-01', '10', '8', '9', '11', '100', '1000', '10.5'],
     ]);
     expect(rows.BBSY).toEqual([{
-      date: '2026-01-01', open: 10, high: 11, low: 9, close: 11, volume: 100, valueTraded: 1000,
+      date: '2026-01-01', open: 10, high: 11, low: 9, close: 11, volume: 100, valueTraded: 1000, referencePrice: 10.5,
     }]);
     const namedSheet = parseTabularRows([
       ['Date', 'Open', 'High', 'Low', 'Close'],

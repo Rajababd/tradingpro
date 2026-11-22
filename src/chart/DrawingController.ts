@@ -2,12 +2,51 @@ import type { IChartApi, ISeriesApi, SeriesType } from 'lightweight-charts';
 import { DrawingManager, getToolRegistry, type DrawingInstance, type DrawingJSON } from '../vendor/lightweight-charts-drawing.es.js';
 import type { SeriesManager } from './SeriesManager';
 
+type DrawingSettingsDrawing = {
+  id: string;
+  type: string;
+  anchors: Array<{ time: unknown; price: number }>;
+  getSeries: () => ISeriesApi<SeriesType> | null;
+  style: {
+    lineColor: string;
+    lineWidth: number;
+    lineOpacity: number;
+    lineDash: number[];
+    fillColor: string;
+    fillOpacity: number;
+    showLabels: boolean;
+    labelFont: string;
+    labelColor: string;
+  };
+  options: {
+    visible?: boolean;
+    locked?: boolean;
+    zIndex?: number;
+    extendLeft?: boolean;
+    extendRight?: boolean;
+  };
+  trendLineOptions?: Record<string, boolean>;
+  setTrendLineOptions?: (options: Record<string, unknown>) => void;
+  horizontalLineOptions?: { showPrice?: boolean; showLabel?: boolean; labelText?: string };
+  setHorizontalLineOptions?: (options: Record<string, unknown>) => void;
+  fibOptions?: { levels?: number[]; showPrices?: boolean; showPercentages?: boolean; extendLines?: boolean; reverseDirection?: boolean };
+  setFibOptions?: (options: Record<string, unknown>) => void;
+};
+
+type DrawingManagerWithSettings = DrawingManager & {
+  getSelectedDrawing(): DrawingSettingsDrawing | null;
+  notifyDrawingUpdated(id: string): void;
+  deselectAll(): void;
+};
+
 /**
  * Owns the drawing library lifecycle and resolves drawings by stable series identity.
  * The manager is intentionally separate from React so saved drawings remain plain JSON.
  */
 export class DrawingController {
-  readonly #manager = new DrawingManager();
+  // The bundled library exposes these runtime methods/properties but its shipped JS
+  // declarations omit them; keep the compatibility surface local to this adapter.
+  readonly #manager = new DrawingManager() as DrawingManagerWithSettings;
   readonly #registry = getToolRegistry();
   #chart: IChartApi | null = null;
   #container: HTMLElement | null = null;
@@ -80,6 +119,71 @@ export class DrawingController {
     if (!drawing) throw new Error(`Unknown drawing tool "${type}".`);
     this.#manager.addDrawing(drawing, api);
     return drawing;
+  }
+
+  get selectedDrawing(): DrawingSettingsDrawing | null {
+    return this.#manager.getSelectedDrawing();
+  }
+
+  /** Returns the selected drawing's anchor midpoint in viewport coordinates. */
+  getSelectedScreenPosition(): { x: number; y: number } | null {
+    const drawing = this.#manager.getSelectedDrawing();
+    if (!drawing || !this.#chart || !this.#container || drawing.anchors.length === 0) return null;
+    const series = drawing.getSeries();
+    if (!series) return null;
+    const timeScale = this.#chart.timeScale();
+    const coordinates: Array<{ x: number; y: number }> = [];
+    for (const anchor of drawing.anchors) {
+      const x = timeScale.timeToCoordinate(anchor.time as never);
+      const y = series.priceToCoordinate(anchor.price as never);
+      if (x !== null && y !== null && Number.isFinite(x) && Number.isFinite(y)) {
+        coordinates.push({ x, y });
+      }
+    }
+    if (!coordinates.length) return null;
+    const x = coordinates.reduce((sum, point) => sum + point.x, 0) / coordinates.length;
+    const y = coordinates.reduce((sum, point) => sum + point.y, 0) / coordinates.length;
+    const containerRect = this.#container.getBoundingClientRect();
+    const pane = series.getPane() as unknown as { getHTMLElement?: () => HTMLElement };
+    const paneRect = pane.getHTMLElement?.().getBoundingClientRect();
+    const leftScaleWidth = this.#chart.priceScale('left', series.getPane().paneIndex()).width();
+    return {
+      x: containerRect.left + leftScaleWidth + x,
+      y: (paneRect?.top ?? containerRect.top) + y,
+    };
+  }
+
+  updateSelected(patch: {
+    style?: Partial<DrawingSettingsDrawing['style']>;
+    options?: Partial<NonNullable<DrawingSettingsDrawing['options']>>;
+    trendLineOptions?: Record<string, boolean>;
+    horizontalLineOptions?: Record<string, unknown>;
+    fibOptions?: Record<string, unknown>;
+  }): void {
+    const drawing = this.#manager.getSelectedDrawing();
+    if (!drawing) return;
+    if (patch.style) drawing.style = { ...drawing.style, ...patch.style };
+    const configurable = drawing;
+    if (patch.options) {
+      drawing.options = { ...drawing.options, ...patch.options };
+      // These subclasses serialize their complete option bags separately from base options.
+      configurable.setTrendLineOptions?.(patch.options as Record<string, unknown>);
+      configurable.setHorizontalLineOptions?.(patch.options as Record<string, unknown>);
+      configurable.setFibOptions?.(patch.options as Record<string, unknown>);
+    }
+    if (patch.trendLineOptions) configurable.setTrendLineOptions?.(patch.trendLineOptions);
+    if (patch.horizontalLineOptions) configurable.setHorizontalLineOptions?.(patch.horizontalLineOptions);
+    if (patch.fibOptions) configurable.setFibOptions?.(patch.fibOptions);
+    this.#manager.notifyDrawingUpdated(drawing.id);
+  }
+
+  deselectAll(): void {
+    this.#manager.deselectAll();
+  }
+
+  removeSelected(): void {
+    const drawing = this.#manager.getSelectedDrawing();
+    if (drawing) this.#manager.removeDrawing(drawing.id);
   }
 
   remove(id: string): void {

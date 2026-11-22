@@ -4,6 +4,7 @@ var p = (u, i, t) => Fn(u, typeof i != "symbol" ? i + "" : i, t);
 const Dn = {
   lineColor: "#2962FF",
   lineWidth: 2,
+  lineOpacity: 1,
   lineDash: [],
   fillColor: "rgba(41, 98, 255, 0.1)",
   fillOpacity: 0.1,
@@ -474,6 +475,11 @@ class Cr {
   getSelectedDrawing() {
     return this._selectedId && this._drawings.get(this._selectedId) || null;
   }
+  /** Notify host applications after a drawing's style or options are edited externally. */
+  notifyDrawingUpdated(id) {
+    const drawing = this._drawings.get(id);
+    if (drawing) this.emit("drawing:updated", { drawingId: id, drawing });
+  }
   // ============ Tool Management ============
   /**
    * Set the active drawing tool
@@ -918,9 +924,12 @@ class Mr extends Oe {
     if (!r) return;
     const a = this.anchorToPixel(r, e);
     if (!a) return;
-    i.strokeStyle = n.lineColor, i.lineWidth = n.lineWidth * o, i.globalAlpha = t.length === 0 ? 0.5 : 0.7;
+    i.strokeStyle = n.lineColor, i.lineWidth = n.lineWidth * o, i.save();
+    i.globalAlpha = (t.length === 0 ? 0.5 : 0.7) * (n.lineOpacity ?? 1);
     const c = { x: 0, y: a.y }, l = { x: e.width, y: a.y };
-    t.length === 0 ? z(i, c, l, [5, 5], o) : b(i, c, l, o), this.drawAnchorPoint(i, a, o), i.globalAlpha = 1;
+    t.length === 0 ? z(i, c, l, [5, 5], o) : b(i, c, l, o);
+    i.restore();
+    this.drawAnchorPoint(i, a, o);
   }
 }
 class Dr extends Oe {
@@ -1172,7 +1181,10 @@ class Gn {
       );
       o = c.start, r = c.end;
     }
+    i.save();
+    i.globalAlpha *= this._drawing.style.lineOpacity ?? 1;
     b(i, o, r, n);
+    i.restore();
   }
   renderLabels(i, t, s, e) {
     const n = this._drawing.trendLineOptions;
@@ -4469,7 +4481,9 @@ class Ns {
       const w = c.reverseDirection ? d - f * x : h + f * x, P = n.priceScale.priceToCoordinate(w);
       if (P === null) continue;
       const O = qs[x] ?? this._drawing.style.lineColor;
+      t.save(), t.globalAlpha *= this._drawing.style.lineOpacity ?? 1;
       t.strokeStyle = O, t.lineWidth = this._drawing.style.lineWidth * e, b(t, { x: g, y: P }, { x: _, y: P }, e);
+      t.restore();
       const m = [];
       c.showPercentages && m.push(`${(x * 100).toFixed(1)}%`), c.showPrices && m.push(v(w)), m.length > 0 && U(
         t,
@@ -4485,7 +4499,9 @@ class Ns {
         e
       );
     }
+    t.save(), t.globalAlpha *= this._drawing.style.lineOpacity ?? 1;
     A(t, this._drawing.style, e), t.setLineDash([5, 5]), b(t, r, a, e), t.setLineDash([]);
+    t.restore();
     const y = this._drawing.state;
     if (y === "selected" || y === "editing") {
       const x = this._drawing.getControlPoints(n);

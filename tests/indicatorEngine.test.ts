@@ -29,6 +29,27 @@ function configured(candles: readonly Candle[] = []) {
 const snapshot = (e: IndicatorEngine) =>
   Object.fromEntries(e.list().map((i) => [i.id, Object.fromEntries(i.outputs.map((o) => [o.key, [...e.values(i.id, o.key)]]))]));
 
+describe('IndicatorEngine: calculation modes', () => {
+  it('uses reference-price direction for OBV while A/D remains traditional', () => {
+    const candles: Candle[] = [
+      { time: 1 as Candle['time'], open: 10, high: 14, low: 8, close: 12, volume: 100, referencePrice: 11 },
+      { time: 2 as Candle['time'], open: 12, high: 14, low: 9, close: 10, volume: 50, referencePrice: 11 },
+      { time: 3 as Candle['time'], open: 10, high: 16, low: 8, close: 9.5, volume: 20, referencePrice: 9 },
+    ];
+    const e = new IndicatorEngine();
+    e.addIndicator({ definitionId: 'obv' }); e.addIndicator({ definitionId: 'ad' });
+    e.reset(candles);
+    expect(e.values('obv', 'obv')).toEqual([100, 50, 30]);
+    const traditionalAd = [...e.values('ad', 'ad')];
+    e.setCalculationMode('reference');
+    expect(e.values('obv', 'obv')).toEqual([100, 50, 70]);
+    expect(e.values('ad', 'ad')).toEqual(traditionalAd);
+    e.setCalculationMode('traditional');
+    expect(e.values('obv', 'obv')).toEqual([100, 50, 30]);
+    expect(e.values('ad', 'ad')).toEqual(traditionalAd);
+  });
+});
+
 describe('IndicatorEngine: configuration', () => {
   it('instances have stable ids; two RSIs with different periods coexist independently', () => {
     const e = configured(randomCandles(60, 1));

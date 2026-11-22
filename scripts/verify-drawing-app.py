@@ -48,13 +48,80 @@ with sync_playwright() as p:
         page.get_by_role("button", name="تحديث البيانات").click()
         page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
         page.wait_for_timeout(250)
+        legend_layout = page.locator(".legend").evaluate("""el => {
+            const style = getComputedStyle(el);
+            return {fontSize: style.fontSize, whiteSpace: style.whiteSpace,
+                    overflowWrap: style.overflowWrap, maxWidth: style.maxWidth};
+        }""")
+        check(f"{mode}: crosshair legend font is reduced by 10%",
+              abs(float(legend_layout["fontSize"].replace("px", "")) - 10.8) < 0.01,
+              str(legend_layout))
+        check(f"{mode}: crosshair legend is allowed to wrap dynamically",
+              legend_layout["whiteSpace"] == "normal" and legend_layout["overflowWrap"] == "anywhere",
+              str(legend_layout))
+        if mode == "phone":
+            wrap_metrics = page.locator(".legend").evaluate("""el => {
+                el.textContent = "2026-11-05  O 123456789012345.12  H 123456789012345.34  L 123456789012345.01  C 123456789012345.23";
+                return {clientWidth: el.clientWidth, scrollWidth: el.scrollWidth,
+                        height: el.getBoundingClientRect().height,
+                        lineHeight: parseFloat(getComputedStyle(el).lineHeight)};
+            }""")
+            check(f"{mode}: long OHLC values wrap without horizontal overflow",
+                  wrap_metrics["scrollWidth"] <= wrap_metrics["clientWidth"] + 1 and
+                  wrap_metrics["height"] > wrap_metrics["lineHeight"] * 1.4,
+                  str(wrap_metrics))
+            page.locator(".legend").evaluate("el => { el.textContent = ''; }")
         export_drawings = lambda: page.evaluate("window.__tradingpro.chart.drawings.export()")
-        button = page.get_by_role("button", name="Trend line")
+        button = page.get_by_role("button", name="خط الاتجاه")
         check(f"{mode}: trend-line tool is present", button.count() == 1)
         button.click()
         check(f"{mode}: trend-line tool activates", button.get_attribute("aria-pressed") == "true")
 
         box = page.locator('[data-testid="chart"]').bounding_box()
+        if mode == "phone":
+            pinch = page.evaluate("""() => {
+              const api = window.__tradingpro.chart.series.get('price');
+              const pane = api.getPane().getHTMLElement();
+              const rect = pane.getBoundingClientRect();
+              const x = rect.left + rect.width * 0.5;
+              const centerY = rect.top + rect.height * 0.5;
+              const scale = api.priceScale();
+              const visible = scale.getVisibleRange();
+              const top = api.coordinateToPrice(0);
+              const bottom = api.coordinateToPrice(rect.height);
+              const before = visible || {from: Math.min(top, bottom), to: Math.max(top, bottom)};
+              const timeBefore = window.__tradingpro.chart.viewport.getLogicalRange();
+              const target = document.elementFromPoint(x, centerY);
+              const make = (identifier, y) => new Touch({
+                identifier, target, clientX: x, clientY: y, pageX: x, pageY: y,
+                screenX: x, screenY: y, radiusX: 2, radiusY: 2, rotationAngle: 0, force: 1
+              });
+              const a = make(201, centerY - 40), b = make(202, centerY + 40);
+              target.dispatchEvent(new TouchEvent('touchstart', {
+                bubbles: true, cancelable: true, touches: [a, b], targetTouches: [a, b], changedTouches: [a, b]
+              }));
+              const a2 = make(201, centerY - 60), b2 = make(202, centerY + 60);
+              target.dispatchEvent(new TouchEvent('touchmove', {
+                bubbles: true, cancelable: true, touches: [a2, b2], targetTouches: [a2, b2], changedTouches: [a2, b2]
+              }));
+              target.dispatchEvent(new TouchEvent('touchend', {
+                bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [a2, b2]
+              }));
+              const after = scale.getVisibleRange();
+              const timeAfter = window.__tradingpro.chart.viewport.getLogicalRange();
+              const result = {
+                beforeSpan: before.to - before.from,
+                afterSpan: after ? after.to - after.from : null,
+                timeUnchanged: timeBefore && timeAfter &&
+                  Math.abs(timeBefore.from - timeAfter.from) < 1e-6 &&
+                  Math.abs(timeBefore.to - timeAfter.to) < 1e-6
+              };
+              scale.setAutoScale(true);
+              return result;
+            }""")
+            check("phone: vertical two-finger pinch zooms the price scale without changing the time scale",
+                  pinch["afterSpan"] is not None and pinch["afterSpan"] < pinch["beforeSpan"] and pinch["timeUnchanged"],
+                  str(pinch))
         page.locator('[data-testid="chart"]').evaluate("""el => {
             window.__drawingDebugEvents = [];
             for (const type of ["pointerdown", "pointerup", "click"]) {
@@ -148,6 +215,78 @@ with sync_playwright() as p:
             page.wait_for_timeout(100)
             selected = page.evaluate("window.__drawingSelectedId")
             check(f"{mode}: tapping a drawing anchor selects its drawing", selected == anchor_setup["id"], selected)
+
+            # Selection must show only a compact trigger; the settings panel opens on demand.
+            settings_trigger = page.get_by_role("button", name="فتح إعدادات الشكل المرسوم")
+            check(f"{mode}: selecting a drawing shows a small floating settings trigger",
+                  settings_trigger.count() == 1)
+            check(f"{mode}: settings panel stays closed until its trigger is pressed",
+                  page.locator(".drawing-settings-panel").count() == 0)
+            if settings_trigger.count() == 1:
+                settings_trigger.click()
+                settings_panel = page.locator(".drawing-settings-panel")
+                check(f"{mode}: floating trigger opens drawing settings", settings_panel.is_visible())
+                panel_box = settings_panel.bounding_box()
+                check(f"{mode}: settings panel remains compact and does not cover the chart",
+                      panel_box is not None and panel_box["width"] <= 280 and panel_box["height"] <= 362,
+                      str(panel_box))
+                panel_metrics = settings_panel.evaluate("""el => ({
+                    scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+                    overflowY: getComputedStyle(el).overflowY
+                })""")
+                check(f"{mode}: drawing settings scroll inside a compact fixed-height panel",
+                      panel_metrics["overflowY"] in ("auto", "scroll") and panel_metrics["clientHeight"] <= 362,
+                      str(panel_metrics))
+                if panel_metrics["scrollHeight"] > panel_metrics["clientHeight"]:
+                    page.mouse.move(panel_box["x"] + panel_box["width"] / 2, panel_box["y"] + panel_box["height"] - 30)
+                    page.mouse.wheel(0, 160)
+                    page.wait_for_timeout(120)
+                    scroll_after = settings_panel.evaluate("el => el.scrollTop")
+                    check(f"{mode}: dragging/scrolling the settings options moves the list without moving the chart",
+                          scroll_after > 0, str(scroll_after))
+                    settings_panel.evaluate("el => { el.scrollTop = 0; }")
+                move_handle = page.get_by_role("button", name="تحريك قائمة الإعدادات")
+                before_move = settings_panel.bounding_box()
+                handle_box = move_handle.bounding_box()
+                page.mouse.move(handle_box["x"] + handle_box["width"] / 2, handle_box["y"] + handle_box["height"] / 2)
+                page.mouse.down()
+                page.mouse.move(handle_box["x"] + handle_box["width"] / 2 - 40, handle_box["y"] + handle_box["height"] / 2 - 36, steps=6)
+                page.mouse.up()
+                page.wait_for_timeout(100)
+                after_move = settings_panel.bounding_box()
+                moved_on_screen = after_move is not None and (
+                    abs(after_move["x"] - before_move["x"]) > 15 or
+                    abs(after_move["y"] - before_move["y"]) > 15
+                )
+                check(f"{mode}: the top move handle repositions the drawing settings panel",
+                      move_handle.count() == 1 and moved_on_screen,
+                      (before_move, after_move))
+                trend_panel_text = settings_panel.inner_text() if settings_panel.count() else ""
+                removed_trend_settings = ("نمط الخط", "لون التسمية", "خط التسمية", "إظهار التسميات",
+                                          "لون التعبئة", "شفافية التعبئة", "إظهار الشكل", "ترتيب الرسم")
+                check(f"{mode}: trend-line settings omit the requested fields",
+                      all(label not in trend_panel_text for label in removed_trend_settings),
+                      trend_panel_text)
+                check(f"{mode}: trend-line settings retain Ray and remaining controls",
+                      "تحويل إلى شعاع (Ray)" in trend_panel_text and "سماكة الخط" in trend_panel_text,
+                      trend_panel_text)
+                opacity_slider = page.get_by_role("slider", name="شفافية الخط")
+                check(f"{mode}: drawing settings expose a line-opacity slider", opacity_slider.count() == 1)
+                if opacity_slider.count() == 1:
+                    opacity_slider.evaluate("""el => {
+                      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+                      setter.call(el, "35");
+                      el.dispatchEvent(new Event("input", {bubbles:true}));
+                      el.dispatchEvent(new Event("change", {bubbles:true}));
+                    }""")
+                    page.wait_for_function("""() => {
+                      const drawing = window.__tradingpro.chart.drawings.export()[0];
+                      return Math.abs((drawing?.style?.lineOpacity ?? -1) - 0.35) < 0.001;
+                    }""", timeout=3000)
+                    check(f"{mode}: changing line opacity updates the selected drawing",
+                          abs((export_drawings()[0].get("style", {}).get("lineOpacity", -1)) - 0.35) < 0.001,
+                          str(export_drawings()[0].get("style")))
+                page.get_by_role("button", name="إغلاق الإعدادات").click()
             page.evaluate("""() => {
               const root = document.querySelector('[data-testid="chart"]');
               root.addEventListener('pointerdown', (event) => {
@@ -188,7 +327,7 @@ with sync_playwright() as p:
 
         # Continue with a one-click tool even if the two-click tool failed; this distinguishes
         # a general click-dispatch problem from an anchor-count/second-click problem.
-        horizontal = page.get_by_role("button", name="Horizontal line")
+        horizontal = page.get_by_role("button", name="خط أفقي")
         horizontal.click()
         point = (box["x"] + box["width"] * 0.55, box["y"] + box["height"] * 0.48)
         if mode == "desktop":
@@ -216,7 +355,7 @@ with sync_playwright() as p:
         check(f"{mode}: Rectangle tool is absent from the drawing toolbar",
               page.get_by_role("button", name="Rectangle").count() == 0)
         # Exercise the remaining two-anchor tool in the real UI as well.
-        for tool_name, tool_label in (("fib-retracement", "Fib retracement"),):
+        for tool_name, tool_label in (("fib-retracement", "تصحيح فيبوناتشي"),):
             tool_button = page.get_by_role("button", name=tool_label)
             check(f"{mode}: {tool_label} tool is present", tool_button.count() == 1)
             if tool_button.count() != 1:
@@ -321,6 +460,11 @@ with sync_playwright() as p:
             check(f"{mode}: restored drawing IDs and types match",
                   [(d.get("id"), d.get("type")) for d in restored_drawings] ==
                   [(d.get("id"), d.get("type")) for d in expected_drawings])
+            restored_trend = next((d for d in restored_drawings if d.get("type") == "trend-line"), None)
+            check(f"{mode}: line opacity survives page reload",
+                  restored_trend is not None and
+                  abs((restored_trend.get("style", {}).get("lineOpacity", -1)) - 0.35) < 0.001,
+                  str(restored_trend))
         except Exception as error:
             check(f"{mode}: drawings restore after page reload", False, str(error))
             print(f"DEBUG {mode}: expected persisted drawings={expected_drawings}")
@@ -328,18 +472,28 @@ with sync_playwright() as p:
         # A cleared drawing set must remain empty after debounce and reload.
         clear_button = page.get_by_role("button", name="Clear drawings")
         clear_button.click()
+        confirm_dialog = page.get_by_role("dialog", name="تأكيد حذف الرسومات")
+        check(f"{mode}: clear drawings asks for confirmation before deleting",
+              confirm_dialog.is_visible() and len(export_drawings()) > 0)
+        page.get_by_role("button", name="إغلاق نافذة التأكيد").click()
+        check(f"{mode}: closing the confirmation dialog cancels deletion",
+              confirm_dialog.count() == 0 and len(export_drawings()) > 0)
+        clear_button.click()
+        confirm_dialog = page.get_by_role("dialog", name="تأكيد حذف الرسومات")
+        check(f"{mode}: confirmation can be opened again", confirm_dialog.is_visible())
+        page.get_by_role("button", name="موافق").click()
         try:
             page.wait_for_function("window.__tradingpro.chart.drawings.export().length === 0", timeout=3000)
-            check(f"{mode}: clear drawings removes all drawings", len(export_drawings()) == 0)
+            check(f"{mode}: confirming clear removes all drawings", len(export_drawings()) == 0)
             page.wait_for_timeout(350)  # allow the debounced empty state to be persisted
             page.reload()
             page.get_by_role("button", name="تحديث البيانات").click()
             page.wait_for_function("window.__tradingpro && document.querySelector('.status')?.textContent.includes('candles')", timeout=20000)
             page.wait_for_timeout(400)  # allow asynchronous restoration to complete
-            check(f"{mode}: cleared drawings stay cleared after reload", len(export_drawings()) == 0,
+            check(f"{mode}: confirmed clear stays cleared after reload", len(export_drawings()) == 0,
                   f"restored={export_drawings()}")
         except Exception as error:
-            check(f"{mode}: cleared drawings stay cleared after reload", False, str(error))
+            check(f"{mode}: confirmed clear stays cleared after reload", False, str(error))
             print(f"DEBUG {mode}: drawings after clear/reload={export_drawings()}")
         check(f"{mode}: no browser exceptions", not errors, repr(errors))
         context.close()

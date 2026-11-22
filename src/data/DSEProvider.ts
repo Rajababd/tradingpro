@@ -11,7 +11,7 @@ export const DSE_SYMBOLS = [
 ] as const;
 
 type DseSymbol = (typeof DSE_SYMBOLS)[number];
-type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null; corrected?: boolean };
+type DailyRow = { date: string; open: number; high: number; low: number; close: number; volume: number | null; valueTraded: number | null; referencePrice?: number | null; corrected?: boolean };
 
 export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly DailyRow[]): { rows: DailyRow[]; added: number; updated: number; kept: number } {
   const byDate = new Map(existing.map((row) => [row.date, row]));
@@ -32,8 +32,9 @@ export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly
       ...current,
       volume: current.volume === null ? row.volume : current.volume,
       valueTraded: current.valueTraded === null ? row.valueTraded : current.valueTraded,
+      ...((row.referencePrice ?? current.referencePrice) === undefined ? {} : { referencePrice: row.referencePrice ?? current.referencePrice }),
     };
-    if (completed.volume !== current.volume || completed.valueTraded !== current.valueTraded) {
+    if (completed.volume !== current.volume || completed.valueTraded !== current.valueTraded || completed.referencePrice !== current.referencePrice) {
       byDate.set(row.date, completed);
       updated++;
     } else {
@@ -101,7 +102,8 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   const corrected = normalizedHigh !== high || normalizedLow !== low;
   const volume = firstNumber(row.volume_traded, row.traded_volume, row.volume);
   const valueTraded = firstNumber(row.value_traded, row.traded_value, row.valueTraded);
-  if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
+  const referencePrice = firstNumber(row.reference_price, row.referencePrice);
+  if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0) || (referencePrice !== null && referencePrice <= 0)) return null;
   return {
     date,
     open,
@@ -110,6 +112,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
     close,
     volume,
     valueTraded,
+    ...(referencePrice === null ? {} : { referencePrice }),
     corrected,
   };
 }
@@ -134,6 +137,7 @@ function aggregateDaily(rows: readonly DailyRow[], timeframe: Timeframe): Array<
     return sorted.map((r) => ({
       time: dateSeconds(r.date), open: r.open, high: r.high, low: r.low, close: r.close,
       volume: r.volume, valueTraded: r.valueTraded,
+      ...(r.referencePrice == null ? {} : { referencePrice: r.referencePrice }),
     }));
   }
 
@@ -155,6 +159,7 @@ function aggregateDaily(rows: readonly DailyRow[], timeframe: Timeframe): Array<
     // Anchor weekly/monthly bars to the first actual trading session, not a weekend/calendar date.
     time: dateSeconds(b.first.date), open: b.first.open, high: b.high, low: b.low, close: b.last.close,
     volume: b.volume, valueTraded: b.valueTraded,
+    ...(b.first.referencePrice == null ? {} : { referencePrice: b.first.referencePrice }),
   }));
 }
 
