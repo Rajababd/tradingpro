@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ChartController } from '../chart/ChartController';
+import type { ChartController, CandleDisplayMode } from '../chart/ChartController';
 import type { IndicatorWorkspace } from '../indicators/IndicatorWorkspace';
 import { Dropdown } from './Dropdown';
 import { useWorkspaceSnapshot } from './useWorkspaceSnapshot';
 
 type Options = Record<string, string | number | boolean>;
 const STORAGE_KEY = 'tradingpro.series-style-settings.v1';
+const CANDLE_MODE_KEY = 'tradingpro.candle-display-mode.v1';
+function readCandleMode(): CandleDisplayMode {
+  try {
+    const value = window.localStorage.getItem(CANDLE_MODE_KEY);
+    return value === 'opening' || value === 'reference' || value === 'both' ? value : 'both';
+  } catch { return 'both'; }
+}
 function readSaved(): Record<string, Options> {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -28,6 +35,7 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState('price');
   const [saved, setSaved] = useState<Record<string, Options>>(readSaved);
+  const [candleMode, setCandleMode] = useState<CandleDisplayMode>(readCandleMode);
   const series = useMemo(() => controller?.isMounted ? controller.series.list() : [], [controller, snapshot]);
   const selected = series.find((item) => item.id === target) ?? series.find((item) => item.id === 'price');
   const options = saved[target] ?? {};
@@ -45,10 +53,17 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
       if (config !== undefined) {
         const safeConfig = { ...config };
         delete safeConfig.borderVisible; delete safeConfig.borderUpColor; delete safeConfig.borderDownColor;
+        if (item.id === 'price' && candleMode === 'both') { delete safeConfig.upColor; delete safeConfig.downColor; }
         controller.series.get(item.id)?.applyOptions(safeConfig as never);
       }
     }
-  }, [controller, snapshot, saved]);
+  }, [controller, snapshot, saved, candleMode]);
+  useEffect(() => { controller?.setCandleDisplayMode(candleMode); }, [controller, candleMode]);
+  const changeCandleMode = (value: string) => {
+    if (value !== 'opening' && value !== 'reference' && value !== 'both') return;
+    setCandleMode(value);
+    try { window.localStorage.setItem(CANDLE_MODE_KEY, value); } catch { /* storage may be unavailable */ }
+  };
   const isCandle = selected?.type === 'Candlestick';
   const isLine = selected?.type === 'Line';
   const restoreDefaults = () => {
@@ -60,6 +75,13 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
     <Dropdown id="menu-chart-style" label="المظهر" open={open} onOpenChange={setOpen} width={330}>
       {controller === null || selected === undefined ? <p className="menu-empty">تظهر إعدادات السلاسل بعد تحميل الرسم.</p> : (
         <div className="chart-style-menu">
+          <label className="chart-style-row">طريقة عرض الشموع
+            <select aria-label="طريقة عرض الشموع" value={candleMode} onChange={(event) => changeCandleMode(event.target.value)}>
+              <option value="opening">شموع الافتتاح</option>
+              <option value="reference">شموع المرجعي</option>
+              <option value="both">كلا النوعين</option>
+            </select>
+          </label>
           <label className="chart-style-target">السلسلة
             <select value={target} onChange={(event) => setTarget(event.target.value)}>
               {series.map((item) => <option key={item.id} value={item.id}>{labelFor(item.id)}</option>)}
