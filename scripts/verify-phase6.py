@@ -108,6 +108,8 @@ with sync_playwright() as p:
     check("price chart selector restores candlesticks without refetching", ev(f"{T}.chart.series.list().find((s) => s.id === 'price').visible") and not ev(f"{T}.chart.series.list().find((s) => s.id === 'price-line').visible") and len(requested_urls) == 6)
 
     # ---- Candle display mode: opening, reference, and combined
+    page.get_by_role("button", name="المظهر", exact=False).click()
+    page.wait_for_selector("#menu-chart-style")
     candle_mode = page.locator('select[aria-label="طريقة عرض الشموع"]')
     check("Appearance menu exposes all three candle display modes",
           candle_mode.count() == 1 and candle_mode.locator("option").all_text_contents() == ["شموع الافتتاح", "شموع المرجعي", "كلا النوعين"])
@@ -127,6 +129,7 @@ with sync_playwright() as p:
     combined_data = ev(f"{T}.chart.series.get('price').data()[0]")
     check("combined mode restores opening outlines and keeps both candle layers without refetching",
           combined_data["open"] == first_candle["open"] and ev(f"{T}.chart.paneSeriesCounts") == [3] and len(requested_urls) == 6)
+    page.keyboard.press("Escape")
     # Price-axis width must grow when the visible labels gain digits, then shrink again.
     base_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
     original_candles = ev(f"{T}.service.candles")
