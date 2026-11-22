@@ -95,7 +95,7 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
             <label className="chart-style-row">لون علامات النقاط الهابطة <input type="color" value={String(options.pointMarkersDownColor ?? options.color ?? defaultLineColor(target))} onChange={(event) => update({ pointMarkersDownColor: event.target.value })} /></label>
           </>}
           {isCandle && <>
-            <label className="chart-style-row">لون الشمعة الصاعدة <input type="color" value={String(options.upColor ?? '#26a69a')} onChange={(event) => update({ upColor: event.target.value, wickUpColor: event.target.value, borderUpColor: event.target.value })} /></label>
+            <label className="chart-style-row">لون الشمعة الصاعدة <input type="color" value={String(options.upColor ?? '#26a69a')} onChange={(event) => update({ upColor: event.target.value, wickUpColor: event.target.value })} /></label>
             <label className="chart-style-row">لون الشمعة الهابطة <input type="color" value={String(options.downColor ?? '#ef5350')} onChange={(event) => update({ downColor: event.target.value })} /></label>
             <label className="chart-style-row">فتيل الشمعة الصاعدة <input type="color" value={String(options.wickUpColor ?? options.upColor ?? '#26a69a')} onChange={(event) => update({ wickUpColor: event.target.value })} /></label>
             <label className="chart-style-row">فتيل الشمعة الهابطة <input type="color" value={String(options.wickDownColor ?? options.downColor ?? '#ef5350')} onChange={(event) => update({ wickDownColor: event.target.value })} /></label>

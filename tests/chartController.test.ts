@@ -40,6 +40,7 @@ import { ChartController, PRICE_PANE_INDEX } from '../src/chart/ChartController'
 const candle = (time: number, close = 11): Candle => ({
   time: time as UnixSeconds,
   open: 10,
+  referencePrice: 10.5,
   high: 12,
   low: 9,
   close,
@@ -97,8 +98,8 @@ describe('ChartController', () => {
       { time: 200, open: 10, high: 12, low: 9, close: 12 },
     ]);
     expect(mocks.series.setData).toHaveBeenNthCalledWith(3, [
-      { time: 100, open: 10, high: 12, low: 9, close: 11 },
-      { time: 200, open: 10, high: 12, low: 9, close: 12 },
+      { time: 100, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+      { time: 200, open: 10.5, high: 12, low: 9, close: 12, borderColor: '#26a69a' },
     ]);
     expect(mocks.timeScale.fitContent).toHaveBeenCalledTimes(1);
   });
@@ -108,8 +109,8 @@ describe('ChartController', () => {
     c.mount(document.createElement('div'));
     c.setCandles([candle(100)]);
     c.setCandles([candle(100), candle(200)]);
-    expect(mocks.series.setData).toHaveBeenCalledTimes(4);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
+    expect(mocks.series.setData).toHaveBeenCalledTimes(6);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(3);
   });
 
   it('rebases drawing anchors by timestamp and shifts the viewport when older candles are prepended', () => {

@@ -30,7 +30,7 @@ const snapshot = (e: IndicatorEngine) =>
   Object.fromEntries(e.list().map((i) => [i.id, Object.fromEntries(i.outputs.map((o) => [o.key, [...e.values(i.id, o.key)]]))]));
 
 describe('IndicatorEngine: calculation modes', () => {
-  it('uses reference-price direction for OBV and only reverses the A/D flow sign', () => {
+  it('uses reference-price direction for OBV while A/D remains traditional', () => {
     const candles: Candle[] = [
       { time: 1 as Candle['time'], open: 10, high: 14, low: 8, close: 12, volume: 100, referencePrice: 11 },
       { time: 2 as Candle['time'], open: 12, high: 14, low: 9, close: 10, volume: 50, referencePrice: 11 },
