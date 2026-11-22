@@ -53,6 +53,7 @@ def new_page(browser, **ctx):
                 "date": row["date"], "open_val": row["open"], "max_val": row["high"],
                 "min_val": row["low"], "close_val": row["close"],
                 "traded_volume": row["volume_traded"], "value_traded": row["value_traded"],
+                "reference_price": row["reference_price"],
             } for row in daily_rows]
             payload = {"value_and_date": payload}
         route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
