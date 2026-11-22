@@ -39,6 +39,7 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
   const series = useMemo(() => controller?.isMounted ? controller.series.list() : [], [controller, snapshot]);
   const selected = series.find((item) => item.id === target) ?? series.find((item) => item.id === 'price');
   const options = saved[target] ?? {};
+  useEffect(() => { controller?.setCandleDisplayMode(candleMode); }, [controller, candleMode]);
   const update = (patch: Options) => {
     setSaved((current) => {
       const next = { ...current, [target]: { ...(current[target] ?? {}), ...patch } };
@@ -58,7 +59,6 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
       }
     }
   }, [controller, snapshot, saved, candleMode]);
-  useEffect(() => { controller?.setCandleDisplayMode(candleMode); }, [controller, candleMode]);
   const changeCandleMode = (value: string) => {
     if (value !== 'opening' && value !== 'reference' && value !== 'both') return;
     setCandleMode(value);
