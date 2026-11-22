@@ -117,7 +117,7 @@ describe('ChartController managers', () => {
       const api = priceSeries();
       controller.updateCandle(candle(3, 1.7));
       expect(api.update).toHaveBeenCalledTimes(1);
-      expect(api.update).toHaveBeenCalledWith({ time: 1704067200 + 3 * 86400, open: 1, high: 2, low: 0.5, close: 1.7 });
+      expect(api.update).toHaveBeenCalledWith({ time: 1704067200 + 3 * 86400, open: 1, high: 2, low: 0.5, close: 1.7, borderColor: '#f2c14e' });
       expect(api.setData).not.toHaveBeenCalled();
       expect(fake.fitContent).not.toHaveBeenCalled();
       expect(fake.timeScaleMock.setVisibleLogicalRange).not.toHaveBeenCalled();

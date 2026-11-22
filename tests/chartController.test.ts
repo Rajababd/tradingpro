@@ -93,8 +93,8 @@ describe('ChartController', () => {
     c.mount(document.createElement('div'));
     c.setCandles([candle(100, 11), candle(200, 12)]);
     expect(mocks.series.setData).toHaveBeenCalledWith([
-      { time: 100, open: 10, high: 12, low: 9, close: 11 },
-      { time: 200, open: 10, high: 12, low: 9, close: 12 },
+      { time: 100, open: 10, high: 12, low: 9, close: 11, borderColor: '#f2c14e' },
+      { time: 200, open: 10, high: 12, low: 9, close: 12, borderColor: '#f2c14e' },
     ]);
     expect(mocks.timeScale.fitContent).toHaveBeenCalledTimes(1);
   });

@@ -32,7 +32,7 @@ export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly
       ...current,
       volume: current.volume === null ? row.volume : current.volume,
       valueTraded: current.valueTraded === null ? row.valueTraded : current.valueTraded,
-      referencePrice: row.referencePrice ?? current.referencePrice ?? null,
+      referencePrice: row.referencePrice ?? current.referencePrice,
     };
     if (completed.volume !== current.volume || completed.valueTraded !== current.valueTraded || completed.referencePrice !== current.referencePrice) {
       byDate.set(row.date, completed);
@@ -103,7 +103,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
   const volume = firstNumber(row.volume_traded, row.traded_volume, row.volume);
   const valueTraded = firstNumber(row.value_traded, row.traded_value, row.valueTraded);
   const referencePrice = firstNumber(row.reference_price, row.referencePrice);
-  if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0)) return null;
+  if ((volume !== null && volume < 0) || (valueTraded !== null && valueTraded < 0) || (referencePrice !== null && referencePrice <= 0)) return null;
   return {
     date,
     open,
@@ -112,7 +112,7 @@ function parseDailyRow(raw: unknown): DailyRow | null {
     close,
     volume,
     valueTraded,
-    referencePrice,
+    ...(referencePrice === null ? {} : { referencePrice }),
     corrected,
   };
 }
@@ -136,7 +136,8 @@ function aggregateDaily(rows: readonly DailyRow[], timeframe: Timeframe): Array<
   if (timeframe === '1D') {
     return sorted.map((r) => ({
       time: dateSeconds(r.date), open: r.open, high: r.high, low: r.low, close: r.close,
-      volume: r.volume, valueTraded: r.valueTraded, referencePrice: r.referencePrice ?? null,
+      volume: r.volume, valueTraded: r.valueTraded,
+      ...(r.referencePrice == null ? {} : { referencePrice: r.referencePrice }),
     }));
   }
 
@@ -157,7 +158,8 @@ function aggregateDaily(rows: readonly DailyRow[], timeframe: Timeframe): Array<
   return [...buckets.values()].map((b) => ({
     // Anchor weekly/monthly bars to the first actual trading session, not a weekend/calendar date.
     time: dateSeconds(b.first.date), open: b.first.open, high: b.high, low: b.low, close: b.last.close,
-    volume: b.volume, valueTraded: b.valueTraded, referencePrice: b.first.referencePrice ?? null,
+    volume: b.volume, valueTraded: b.valueTraded,
+    ...(b.first.referencePrice == null ? {} : { referencePrice: b.first.referencePrice }),
   }));
 }
 

@@ -34,7 +34,7 @@ describe('IndicatorEngine: calculation modes', () => {
     const candles: Candle[] = [
       { time: 1 as Candle['time'], open: 10, high: 14, low: 8, close: 12, volume: 100, referencePrice: 11 },
       { time: 2 as Candle['time'], open: 12, high: 14, low: 9, close: 10, volume: 50, referencePrice: 11 },
-      { time: 3 as Candle['time'], open: 10, high: 16, low: 9, close: 11, volume: 20, referencePrice: 10.5 },
+      { time: 3 as Candle['time'], open: 10, high: 16, low: 8, close: 9.5, volume: 20, referencePrice: 9 },
     ];
     const e = new IndicatorEngine();
     e.addIndicator({ definitionId: 'obv' }); e.addIndicator({ definitionId: 'ad' });
