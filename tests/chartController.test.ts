@@ -6,7 +6,7 @@ import { theme } from '../src/app/theme';
 // These tests verify ChartController's own lifecycle logic against a mocked chart library.
 // They do NOT prove rendering; that is verified separately in a real browser.
 const mocks = vi.hoisted(() => {
-  const series = { setData: vi.fn() };
+  const series = { setData: vi.fn(), applyOptions: vi.fn() };
   const timeScale = {
     fitContent: vi.fn(),
     getVisibleLogicalRange: vi.fn(() => ({ from: 1, to: 5 })),
@@ -35,12 +35,12 @@ vi.mock('lightweight-charts', () => ({
   TrackingModeExitMode: { OnTouchEnd: 0, OnNextTap: 1 },
 }));
 
-import { ChartController, PRICE_PANE_INDEX } from '../src/chart/ChartController';
+import { ChartController, PRICE_PANE_INDEX, getAdjustedReferencePrice } from '../src/chart/ChartController';
 
 const candle = (time: number, close = 11): Candle => ({
   time: time as UnixSeconds,
   open: 10,
-  referencePrice: 10.5,
+  referencePrice: 1050,
   high: 12,
   low: 9,
   close,
@@ -89,13 +89,14 @@ describe('ChartController', () => {
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
   });
 
-  it('maps natural OHLC to the base series and reference-open candles to the overlay', () => {
+  it('defaults to combined mode: opening candles are outlined and reference candles are filled', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     c.setCandles([candle(100, 11), candle(200, 12)]);
+    expect(c.candleDisplayMode).toBe('both');
     expect(mocks.series.setData).toHaveBeenNthCalledWith(1, [
-      { time: 100, open: 10, high: 12, low: 9, close: 11 },
-      { time: 200, open: 10, high: 12, low: 9, close: 12 },
+      { time: 100, open: 10, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+      { time: 200, open: 10, high: 12, low: 9, close: 12, borderColor: '#26a69a' },
     ]);
     expect(mocks.series.setData).toHaveBeenNthCalledWith(2, [
       { time: 100, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
@@ -105,6 +106,45 @@ describe('ChartController', () => {
       { time: 100, value: 11 }, { time: 200, value: 12 },
     ]);
     expect(mocks.timeScale.fitContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches between opening-only, reference-only and combined candle data', () => {
+    const c = new ChartController(theme);
+    c.mount(document.createElement('div'));
+    c.setCandles([candle(100, 9), candle(200, 11)]);
+
+    c.setCandleDisplayMode('opening');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(4, [
+      { time: 100, open: 10, high: 12, low: 9, close: 9 },
+      { time: 200, open: 10, high: 12, low: 9, close: 11 },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(5, []);
+
+    c.setCandleDisplayMode('reference');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(6, [
+      { time: 100, open: 10.5, high: 12, low: 9, close: 9, borderColor: '#ef5350' },
+      { time: 200, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(7, []);
+
+    c.setCandleDisplayMode('both');
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(8, [
+      { time: 100, open: 10, high: 12, low: 9, close: 9, borderColor: '#ef5350' },
+      { time: 200, open: 10, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(9, [
+      { time: 100, open: 10.5, high: 12, low: 9, close: 9, borderColor: '#ef5350' },
+      { time: 200, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
+    ]);
+  });
+
+  it('adjusts reference price only before 2026-01-04', () => {
+    const before = { ...candle(0), time: (Date.parse('2026-01-03T00:00:00Z') / 1000) as UnixSeconds, referencePrice: 12508 };
+    const boundary = { ...candle(0), time: (Date.parse('2026-01-04T00:00:00Z') / 1000) as UnixSeconds, referencePrice: 125.08 };
+    const after = { ...candle(0), time: (Date.parse('2026-01-05T00:00:00Z') / 1000) as UnixSeconds, referencePrice: 125.08 };
+    expect(getAdjustedReferencePrice(before)).toBeCloseTo(125.08);
+    expect(getAdjustedReferencePrice(boundary)).toBe(125.08);
+    expect(getAdjustedReferencePrice(after)).toBe(125.08);
   });
 
   it('replaces data in place on repeated setCandles without creating series', () => {
