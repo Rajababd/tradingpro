@@ -42,6 +42,7 @@ def new_page(browser, **ctx):
             "date": (start_date + timedelta(days=index)).isoformat(),
             "open": str(opening), "high": str(closing + 1), "low": str(opening - 1),
             "close": str(closing), "volume_traded": "1000", "value_traded": "100000",
+            "reference_price": str((opening + 3) * 100),
         })
     requested_urls = []
     def mock_dse(route):
@@ -104,6 +105,27 @@ with sync_playwright() as p:
     chart_type.select_option("candles")
     page.wait_for_function(f"{T}.chart.priceChartType === 'candles'")
     check("price chart selector restores candlesticks without refetching", ev(f"{T}.chart.series.list().find((s) => s.id === 'price').visible") and not ev(f"{T}.chart.series.list().find((s) => s.id === 'price-line').visible") and len(requested_urls) == 6)
+
+    # ---- Candle display mode: opening, reference, and combined
+    candle_mode = page.locator('select[aria-label="طريقة عرض الشموع"]')
+    check("Appearance menu exposes all three candle display modes",
+          candle_mode.count() == 1 and candle_mode.locator("option").all_text_contents() == ["شموع الافتتاح", "شموع المرجعي", "كلا النوعين"])
+    first_candle = ev(f"{T}.service.candles[0]")
+    candle_mode.select_option("opening")
+    page.wait_for_function(f"{T}.chart.candleDisplayMode === 'opening'")
+    opening_data = ev(f"{T}.chart.series.get('price').data()[0]")
+    check("opening-only mode shows the original opening price as a normal candle",
+          opening_data["open"] == first_candle["open"] and ev(f"{T}.chart.paneSeriesCounts") == [3])
+    candle_mode.select_option("reference")
+    page.wait_for_function(f"{T}.chart.candleDisplayMode === 'reference'")
+    reference_data = ev(f"{T}.chart.series.get('price').data()[0]")
+    check("reference-only mode uses the date-adjusted reference price as candle open",
+          abs(reference_data["open"] - (first_candle["referencePrice"] / 100)) < 1e-9)
+    candle_mode.select_option("both")
+    page.wait_for_function(f"{T}.chart.candleDisplayMode === 'both'")
+    combined_data = ev(f"{T}.chart.series.get('price').data()[0]")
+    check("combined mode restores opening outlines and keeps both candle layers without refetching",
+          combined_data["open"] == first_candle["open"] and ev(f"{T}.chart.paneSeriesCounts") == [3] and len(requested_urls) == 6)
     # Price-axis width must grow when the visible labels gain digits, then shrink again.
     base_price_scale_width = ev(f"{T}.chart.priceScaleMinimumWidth")
     original_candles = ev(f"{T}.service.candles")
