@@ -38,17 +38,28 @@ const toCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> => ({
   close: c.close,
 });
 
+/** Syrian currency redenomination: historical reference prices before 2026-01-04
+ * are expressed in the old unit and must be converted to the new unit. Use UTC
+ * because Candle.time is a UTC Unix timestamp, avoiding device-timezone drift. */
+export const getAdjustedReferencePrice = (c: Candle): number | null => {
+  const referencePrice = c.referencePrice;
+  if (referencePrice == null || !Number.isFinite(referencePrice) || referencePrice <= 0) return null;
+  const candleDate = new Date(Number(c.time) * 1000).toISOString().slice(0, 10);
+  return candleDate < '2026-01-04' ? referencePrice / 100 : referencePrice;
+};
+
 /** Reference-open overlay. H/L are expanded only when required by the chart's OHLC invariant;
  * the overlay wick is hidden, while the base series remains the source of natural HLC values. */
 export const toReferenceCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> | null => {
-  if (c.referencePrice == null || !Number.isFinite(c.referencePrice) || c.referencePrice <= 0) return null;
+  const referencePrice = getAdjustedReferencePrice(c);
+  if (referencePrice === null) return null;
   return {
     time: c.time as number as UTCTimestamp,
-    open: c.referencePrice,
-    high: Math.max(c.high, c.referencePrice, c.close),
-    low: Math.min(c.low, c.referencePrice, c.close),
+    open: referencePrice,
+    high: Math.max(c.high, referencePrice, c.close),
+    low: Math.min(c.low, referencePrice, c.close),
     close: c.close,
-    borderColor: c.close > c.referencePrice ? '#26a69a' : c.close < c.referencePrice ? '#ef5350' : '#f2c14e',
+    borderColor: c.close > referencePrice ? '#26a69a' : c.close < referencePrice ? '#ef5350' : '#f2c14e',
   };
 };
 
