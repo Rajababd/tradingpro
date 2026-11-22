@@ -284,6 +284,7 @@ export class ChartController {
     this.#priceChartType = type;
     this.#series.setVisible(PRICE_SERIES_ID, type === 'candles');
     this.#series.setVisible(PRICE_LINE_SERIES_ID, type === 'line');
+    this.#referenceSeries?.applyOptions({ visible: type === 'candles' && this.#candleDisplayMode === 'both' } as never);
   }
 
   get priceChartType(): 'candles' | 'line' { return this.#priceChartType; }
@@ -306,6 +307,7 @@ export class ChartController {
       base.applyOptions({ upColor: this.theme.up, downColor: this.theme.down, wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: false, zOrder: 'normal' } as never);
       base.setData(candles.map(toCandlestickData));
       this.#referenceSeries?.setData([]);
+      this.#referenceSeries?.applyOptions({ visible: false } as never);
       return;
     }
     if (this.#candleDisplayMode === 'reference') {
@@ -317,6 +319,7 @@ export class ChartController {
     base.applyOptions({ upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: true, zOrder: 'top' } as never);
     base.setData(candles.map(toOpeningOutlineCandlestickData));
     this.#referenceSeries?.setData(references);
+    this.#referenceSeries?.applyOptions({ visible: this.#priceChartType === 'candles' } as never);
   }
 
   /** Restore all series styling to application defaults without changing data or visibility. */
