@@ -9,6 +9,12 @@ import { IntField } from './IntField';
 export function IndicatorsMenu({ workspace, rows }: { workspace: IndicatorWorkspace; rows: readonly IndicatorRowState[] }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   return (
+    <>
+    <fieldset className="outputs" aria-label="طريقة حساب المؤشرات">
+      <legend>طريقة حساب Volume وOBV وA/D</legend>
+      <label className="chip"><input type="radio" name="indicator-calculation-mode" checked={workspace.getSnapshot().calculationMode === 'traditional'} onChange={() => workspace.setCalculationMode('traditional')} /><span>الطريقة التقليدية</span></label>
+      <label className="chip"><input type="radio" name="indicator-calculation-mode" checked={workspace.getSnapshot().calculationMode === 'reference'} onChange={() => workspace.setCalculationMode('reference')} /><span>طريقة السعر المرجعي</span></label>
+    </fieldset>
     <ul className="menu-list">
       {rows.map((row) => {
         const hasSettings = row.paramSpecs.length > 0 || row.outputs.length > 1;
@@ -66,5 +72,6 @@ export function IndicatorsMenu({ workspace, rows }: { workspace: IndicatorWorksp
         );
       })}
     </ul>
+    </>
   );
 }

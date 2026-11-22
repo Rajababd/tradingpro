@@ -39,6 +39,13 @@ export interface SmaRowState {
 export interface WorkspaceSnapshot {
   readonly indicators: readonly IndicatorRowState[];
   readonly smas: readonly SmaRowState[];
+  readonly calculationMode: 'traditional' | 'reference';
+}
+
+const CALCULATION_MODE_KEY = 'tradingpro.indicator-calculation-mode.v1';
+function readCalculationMode(): 'traditional' | 'reference' {
+  try { return window.localStorage.getItem(CALCULATION_MODE_KEY) === 'reference' ? 'reference' : 'traditional'; }
+  catch { return 'traditional'; }
 }
 
 interface Realized {
@@ -86,12 +93,15 @@ export class IndicatorWorkspace {
   readonly #realized = new Map<string, Realized[]>();
   readonly #stops: Unsubscribe[] = [];
   #snapshot: WorkspaceSnapshot;
+  #calculationMode: 'traditional' | 'reference';
 
   constructor(
     private readonly engine: IndicatorEngine,
     private readonly chart: ChartSurface,
     private readonly styles: SeriesStyleProvider,
   ) {
+    this.#calculationMode = readCalculationMode();
+    engine.setCalculationMode(this.#calculationMode);
     this.#sources = engine.registry.smaSourceOptions();
     for (const source of this.#sources) this.#smaConfig.set(source.key, { period: DEFAULT_SMA_PERIOD, enabled: false });
     this.#snapshot = this.#buildSnapshot();
@@ -147,6 +157,16 @@ export class IndicatorWorkspace {
   setIndicatorParams(definitionId: string, patch: Record<string, number>): void {
     this.#ensureIndicator(definitionId);
     this.engine.setParams(definitionId, patch); // recomputes it and any SMA that reads it; series follow via engine events
+    this.#refresh();
+  }
+
+  get calculationMode(): 'traditional' | 'reference' { return this.#calculationMode; }
+
+  setCalculationMode(mode: 'traditional' | 'reference'): void {
+    if (mode === this.#calculationMode) return;
+    this.#calculationMode = mode;
+    this.engine.setCalculationMode(mode);
+    try { window.localStorage.setItem(CALCULATION_MODE_KEY, mode); } catch { /* storage may be unavailable */ }
     this.#refresh();
   }
 
@@ -349,6 +369,6 @@ export class IndicatorWorkspace {
         sourceDisplayed: source.definitionId === null ? null : this.#isDisplayed(source.definitionId),
       };
     });
-    return { indicators, smas };
+    return { indicators, smas, calculationMode: this.#calculationMode };
   }
 }

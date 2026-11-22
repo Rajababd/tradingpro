@@ -39,7 +39,14 @@ export function createSeriesStyles(theme: Pick<Theme, 'accent' | 'warn' | 'up' |
           return {
             definition: HistogramSeries,
             options: { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false },
-            pointColor: (_value, candle) => withAlpha(candle !== undefined && candle.close < candle.open ? theme.down : theme.up, '99'),
+            pointColor: (_value, candle) => {
+              if (candle === undefined) return undefined;
+              if (candle.indicatorMode === 'reference') {
+                if (candle.referencePrice == null || candle.close === candle.referencePrice) return withAlpha('#f2c14e', '99');
+                return withAlpha(candle.close > candle.referencePrice ? theme.up : theme.down, '99');
+              }
+              return withAlpha(candle.close < candle.open ? theme.down : theme.up, '99');
+            },
           };
         case 'obv:obv':
           return line(theme.accent);

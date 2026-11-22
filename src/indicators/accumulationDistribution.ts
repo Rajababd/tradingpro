@@ -25,7 +25,10 @@ export const adKernel: Kernel<Candle, AdState> = {
     if (candle.volume === null) return { state: { total: null }, values: { ad: null } };
     const range = candle.high - candle.low;
     const multiplier = range === 0 ? 0 : (candle.close - candle.low - (candle.high - candle.close)) / range;
-    const flow = multiplier * candle.volume;
+    const traditionalFlow = multiplier * candle.volume;
+    const direction = candle.referencePrice == null ? 0 : candle.close > candle.referencePrice ? 1 : candle.close < candle.referencePrice ? -1 : 0;
+    // Preserve the traditional money-flow magnitude; reference mode changes only its sign.
+    const flow = candle.indicatorMode === 'reference' ? Math.abs(traditionalFlow) * direction : traditionalFlow;
     const total = state.total === null ? flow : state.total + flow;
     return { state: { total }, values: { ad: total } };
   },

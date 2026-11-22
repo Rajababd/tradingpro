@@ -30,9 +30,13 @@ export const obvKernel: Kernel<Candle, ObvState> = {
     if (candle.volume === null) return { state: { prevClose: candle.close, total: null }, values: { obv: null } };
     let total: number;
     if (state.total === null || state.prevClose === null) {
-      total = candle.volume;
+      total = candle.indicatorMode === 'reference'
+        ? (candle.referencePrice == null ? 0 : (candle.close > candle.referencePrice ? 1 : candle.close < candle.referencePrice ? -1 : 0) * candle.volume)
+        : candle.volume;
     } else {
-      const direction = candle.close > state.prevClose ? 1 : candle.close < state.prevClose ? -1 : 0;
+      const direction = candle.indicatorMode === 'reference'
+        ? (candle.referencePrice == null ? 0 : candle.close > candle.referencePrice ? 1 : candle.close < candle.referencePrice ? -1 : 0)
+        : (candle.close > state.prevClose ? 1 : candle.close < state.prevClose ? -1 : 0);
       total = state.total + direction * candle.volume;
     }
     return { state: { prevClose: candle.close, total }, values: { obv: total } };
