@@ -32,7 +32,7 @@ export function mergeDailyRows(existing: readonly DailyRow[], incoming: readonly
       ...current,
       volume: current.volume === null ? row.volume : current.volume,
       valueTraded: current.valueTraded === null ? row.valueTraded : current.valueTraded,
-      referencePrice: row.referencePrice ?? current.referencePrice,
+      ...((row.referencePrice ?? current.referencePrice) === undefined ? {} : { referencePrice: row.referencePrice ?? current.referencePrice }),
     };
     if (completed.volume !== current.volume || completed.valueTraded !== current.valueTraded || completed.referencePrice !== current.referencePrice) {
       byDate.set(row.date, completed);
