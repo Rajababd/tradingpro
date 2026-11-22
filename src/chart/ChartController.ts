@@ -35,6 +35,7 @@ const toCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> => ({
   high: c.high,
   low: c.low,
   close: c.close,
+  borderColor: c.referencePrice == null || c.close === c.referencePrice ? '#f2c14e' : c.close > c.referencePrice ? '#26a69a' : '#ef5350',
 });
 
 /**
@@ -187,7 +188,9 @@ export class ChartController {
           downColor: t.down,
           wickUpColor: t.up,
           wickDownColor: t.down,
-          borderVisible: false,
+          borderVisible: true,
+          borderUpColor: '#f2c14e',
+          borderDownColor: '#f2c14e',
         },
         paneId: PRICE_PANE_ID,
       });
@@ -236,6 +239,21 @@ export class ChartController {
   }
 
   get priceChartType(): 'candles' | 'line' { return this.#priceChartType; }
+
+  /** Restore all series styling to application defaults without changing data or visibility. */
+  resetAppearance(): void {
+    if (this.#series === null) return;
+    for (const item of this.#series.list()) {
+      const api = this.#series.get(item.id);
+      if (api === undefined) continue;
+      if (item.type === 'Candlestick') {
+        api.applyOptions({ upColor: '#26a69a', downColor: '#ef5350', wickUpColor: '#26a69a', wickDownColor: '#ef5350', borderUpColor: '#f2c14e', borderDownColor: '#f2c14e', borderVisible: true, wickVisible: true, priceLineVisible: false, lastValueVisible: true } as never);
+      } else if (item.type === 'Line') {
+        const color = item.id === PRICE_LINE_SERIES_ID ? '#5aa9e6' : item.id.startsWith('sma:') ? '#f2c14e' : '#d6b25e';
+        api.applyOptions({ color, lineWidth: 2, lineStyle: 0, lineType: 0, lineVisible: true, title: '', lastPriceAnimation: 0, crosshairMarkerVisible: true, pointMarkersVisible: false, crosshairMarkerBackgroundColor: color, crosshairMarkerBorderColor: '#ffffff', crosshairMarkerRadius: 4, pointMarkersRadius: 3, pointMarkersUpColor: color, pointMarkersDownColor: color, priceLineVisible: false, lastValueVisible: true, priceLineColor: '#9aa0a6', priceLineWidth: 1, priceLineStyle: 2 } as never);
+      }
+    }
+  }
 
   /**
    * Replaces the whole dataset and resets the view to fit it. Expects candles already
