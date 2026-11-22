@@ -51,11 +51,11 @@ beforeEach(() => {
 });
 
 describe('ChartController', () => {
-  it('creates one chart and one candlestick series in the price pane on mount', () => {
+  it('creates the base price series, close line and reference overlay in the price pane', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(3);
     expect(mocks.chart.addSeries.mock.calls[0]?.[2]).toBe(PRICE_PANE_INDEX);
     expect(c.isMounted).toBe(true);
   });
@@ -78,7 +78,7 @@ describe('ChartController', () => {
     c.mount(el);
     c.mount(el);
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
-    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(2);
+    expect(mocks.chart.addSeries).toHaveBeenCalledTimes(3);
   });
 
   it('refuses to mount to a different container while mounted', () => {
@@ -88,13 +88,17 @@ describe('ChartController', () => {
     expect(mocks.createChart).toHaveBeenCalledTimes(1);
   });
 
-  it('maps candles to chart data (time in seconds, OHLC only) and fits content', () => {
+  it('maps natural OHLC to the base series and reference-open candles to the overlay', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     c.setCandles([candle(100, 11), candle(200, 12)]);
     expect(mocks.series.setData).toHaveBeenCalledWith([
-      { time: 100, open: 10, high: 12, low: 9, close: 11, borderColor: '#f2c14e' },
-      { time: 200, open: 10, high: 12, low: 9, close: 12, borderColor: '#f2c14e' },
+      { time: 100, open: 10, high: 12, low: 9, close: 11 },
+      { time: 200, open: 10, high: 12, low: 9, close: 12 },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(3, [
+      { time: 100, open: 10, high: 12, low: 9, close: 11 },
+      { time: 200, open: 10, high: 12, low: 9, close: 12 },
     ]);
     expect(mocks.timeScale.fitContent).toHaveBeenCalledTimes(1);
   });

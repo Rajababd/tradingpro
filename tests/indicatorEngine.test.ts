@@ -43,9 +43,7 @@ describe('IndicatorEngine: calculation modes', () => {
     const traditionalAd = [...e.values('ad', 'ad')];
     e.setCalculationMode('reference');
     expect(e.values('obv', 'obv')).toEqual([100, 50, 70]);
-    expect(e.values('ad', 'ad')[0]).toBeCloseTo(traditionalAd[0]!);
-    expect(e.values('ad', 'ad')[1]).toBeCloseTo(traditionalAd[1]!);
-    expect(e.values('ad', 'ad')[2]).toBeGreaterThan(traditionalAd[2]!);
+    expect(e.values('ad', 'ad')).toEqual(traditionalAd);
     e.setCalculationMode('traditional');
     expect(e.values('obv', 'obv')).toEqual([100, 50, 30]);
     expect(e.values('ad', 'ad')).toEqual(traditionalAd);

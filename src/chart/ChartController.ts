@@ -8,6 +8,7 @@ import {
   type CandlestickData,
   type LineData,
   type IChartApi,
+  type ISeriesApi,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { Theme } from '../app/theme';
@@ -35,7 +36,25 @@ const toCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> => ({
   high: c.high,
   low: c.low,
   close: c.close,
-  borderColor: c.referencePrice == null || c.close === c.referencePrice ? '#f2c14e' : c.close > c.referencePrice ? '#26a69a' : '#ef5350',
+});
+
+/** Reference-open overlay. H/L are expanded only when required by the chart's OHLC invariant;
+ * the overlay wick is hidden, while the base series remains the source of natural HLC values. */
+export const toReferenceCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> | null => {
+  if (c.referencePrice == null || !Number.isFinite(c.referencePrice) || c.referencePrice <= 0) return null;
+  return {
+    time: c.time as number as UTCTimestamp,
+    open: c.referencePrice,
+    high: Math.max(c.high, c.referencePrice, c.close),
+    low: Math.min(c.low, c.referencePrice, c.close),
+    close: c.close,
+    borderColor: c.close > c.referencePrice ? '#26a69a' : c.close < c.referencePrice ? '#ef5350' : '#f2c14e',
+  };
+};
+
+const toReferenceCandlestickDataList = (candles: readonly Candle[]) => candles.flatMap((candle) => {
+  const item = toReferenceCandlestickData(candle);
+  return item === null ? [] : [item];
 });
 
 /**
@@ -52,6 +71,7 @@ export class ChartController {
   #container: HTMLElement | null = null;
   #disposed = false;
   #series: SeriesManager | null = null;
+  #referenceSeries: ISeriesApi<'Candlestick'> | null = null;
   #visibility: VisibilityController | null = null;
   #panes: PaneManager | null = null;
   #viewport: ViewportController | null = null;
@@ -188,13 +208,16 @@ export class ChartController {
           downColor: t.down,
           wickUpColor: t.up,
           wickDownColor: t.down,
-          borderVisible: true,
-          borderUpColor: '#f2c14e',
-          borderDownColor: '#f2c14e',
+          borderVisible: false,
         },
         paneId: PRICE_PANE_ID,
       });
       visibility.addSeries({ id: PRICE_LINE_SERIES_ID, definition: LineSeries, options: { color: '#5aa9e6', lineWidth: 2, priceLineVisible: false, visible: false }, paneId: PRICE_PANE_ID, visible: false });
+      this.#referenceSeries = chart.addSeries(CandlestickSeries, {
+        upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)',
+        wickVisible: false, borderVisible: true, borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+        priceLineVisible: false, lastValueVisible: false, priceScaleId: 'right', zOrder: 'top',
+      } as never, PRICE_PANE_INDEX);
       this.#visibility = visibility;
       this.#panes = panes;
       this.#series = series;
@@ -247,7 +270,7 @@ export class ChartController {
       const api = this.#series.get(item.id);
       if (api === undefined) continue;
       if (item.type === 'Candlestick') {
-        api.applyOptions({ upColor: '#26a69a', downColor: '#ef5350', wickUpColor: '#26a69a', wickDownColor: '#ef5350', borderUpColor: '#f2c14e', borderDownColor: '#f2c14e', borderVisible: true, wickVisible: true, priceLineVisible: false, lastValueVisible: true } as never);
+        api.applyOptions({ upColor: '#26a69a', downColor: '#ef5350', wickUpColor: '#26a69a', wickDownColor: '#ef5350', wickVisible: true, priceLineVisible: false, lastValueVisible: true } as never);
       } else if (item.type === 'Line') {
         const color = item.id === PRICE_LINE_SERIES_ID ? '#5aa9e6' : item.id.startsWith('sma:') ? '#f2c14e' : '#d6b25e';
         api.applyOptions({ color, lineWidth: 2, lineStyle: 0, lineType: 0, lineVisible: true, title: '', lastPriceAnimation: 0, crosshairMarkerVisible: true, pointMarkersVisible: false, crosshairMarkerBackgroundColor: color, crosshairMarkerBorderColor: '#ffffff', crosshairMarkerRadius: 4, pointMarkersRadius: 3, pointMarkersUpColor: color, pointMarkersDownColor: color, priceLineVisible: false, lastValueVisible: true, priceLineColor: '#9aa0a6', priceLineWidth: 1, priceLineStyle: 2 } as never);
@@ -266,6 +289,7 @@ export class ChartController {
     }
     this.#priceCandles = [...candles];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
+    this.#referenceSeries?.setData(toReferenceCandlestickDataList(candles));
     this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).setData(candles.map(toLineData));
     this.#drawings.rebaseLogicalAnchors();
     this.#viewport.fitContent();
@@ -280,6 +304,9 @@ export class ChartController {
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).update(toCandlestickData(candle));
+    const overlay = toReferenceCandlestickData(candle);
+    if (overlay !== null) this.#referenceSeries?.update(overlay);
+    else if (this.#priceCandles.at(-1)?.time === candle.time) this.#referenceSeries?.setData(toReferenceCandlestickDataList([...this.#priceCandles.slice(0, -1), candle]));
     this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).update(toLineData(candle));
     const last = this.#priceCandles.at(-1);
     if (last?.time === candle.time) this.#priceCandles[this.#priceCandles.length - 1] = candle;
@@ -298,6 +325,7 @@ export class ChartController {
     const range = this.#viewport.getLogicalRange();
     this.#priceCandles = [...all];
     this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
+    this.#referenceSeries?.setData(toReferenceCandlestickDataList(all));
     this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).setData(all.map(toLineData));
     this.#drawings.rebaseLogicalAnchors();
     if (range !== null && added > 0) {
@@ -334,6 +362,7 @@ export class ChartController {
     this.#chart = null;
     this.#container = null;
     this.#series = null;
+    this.#referenceSeries = null;
     this.#visibility = null;
     this.#panes = null;
     this.#viewport = null;

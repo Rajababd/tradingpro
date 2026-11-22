@@ -11,7 +11,13 @@ function readSaved(): Record<string, Options> {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw === null) return {};
     const value: unknown = JSON.parse(raw);
-    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, Options> : {};
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+    const configs = value as Record<string, Options>;
+    // Drop legacy candle-border settings from earlier builds; borders now belong to the reference overlay.
+    for (const config of Object.values(configs)) {
+      delete config.borderVisible; delete config.borderUpColor; delete config.borderDownColor;
+    }
+    return configs;
   } catch { return {}; }
 }
 const labelFor = (id: string) => id === 'price' ? 'الشموع اليابانية' : id === 'price-line' ? 'الخط البياني للسعر' : id.startsWith('sma:') ? `SMA · ${id.slice(4)}` : id.toUpperCase();
@@ -36,7 +42,11 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
     if (controller === null || !controller.isMounted) return;
     for (const item of controller.series.list()) {
       const config = saved[item.id];
-      if (config !== undefined) controller.series.get(item.id)?.applyOptions(config as never);
+      if (config !== undefined) {
+        const safeConfig = { ...config };
+        delete safeConfig.borderVisible; delete safeConfig.borderUpColor; delete safeConfig.borderDownColor;
+        controller.series.get(item.id)?.applyOptions(safeConfig as never);
+      }
     }
   }, [controller, snapshot, saved]);
   const isCandle = selected?.type === 'Candlestick';
@@ -89,9 +99,6 @@ export function ChartStyleMenu({ controller, workspace }: { controller: ChartCon
             <label className="chart-style-row">لون الشمعة الهابطة <input type="color" value={String(options.downColor ?? '#ef5350')} onChange={(event) => update({ downColor: event.target.value })} /></label>
             <label className="chart-style-row">فتيل الشمعة الصاعدة <input type="color" value={String(options.wickUpColor ?? options.upColor ?? '#26a69a')} onChange={(event) => update({ wickUpColor: event.target.value })} /></label>
             <label className="chart-style-row">فتيل الشمعة الهابطة <input type="color" value={String(options.wickDownColor ?? options.downColor ?? '#ef5350')} onChange={(event) => update({ wickDownColor: event.target.value })} /></label>
-            <label className="chart-style-row">حدود الشمعة الصاعدة <input type="color" value={String(options.borderUpColor ?? '#f2c14e')} onChange={(event) => update({ borderUpColor: event.target.value })} /></label>
-            <label className="chart-style-row">حدود الشمعة الهابطة <input type="color" value={String(options.borderDownColor ?? '#f2c14e')} onChange={(event) => update({ borderDownColor: event.target.value })} /></label>
-            <label className="chart-style-row">إظهار الحدود <input type="checkbox" checked={Boolean(options.borderVisible ?? true)} onChange={(event) => update({ borderVisible: event.target.checked })} /></label>
             <label className="chart-style-row">إظهار الفتائل <input type="checkbox" checked={Boolean(options.wickVisible ?? true)} onChange={(event) => update({ wickVisible: event.target.checked })} /></label>
           </>}
           {(isLine || isCandle) && <>
