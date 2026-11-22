@@ -332,6 +332,7 @@ export class ChartController {
         api.applyOptions({ color, lineWidth: 2, lineStyle: 0, lineType: 0, lineVisible: true, title: '', lastPriceAnimation: 0, crosshairMarkerVisible: true, pointMarkersVisible: false, crosshairMarkerBackgroundColor: color, crosshairMarkerBorderColor: '#ffffff', crosshairMarkerRadius: 4, pointMarkersRadius: 3, pointMarkersUpColor: color, pointMarkersDownColor: color, priceLineVisible: false, lastValueVisible: true, priceLineColor: '#9aa0a6', priceLineWidth: 1, priceLineStyle: 2 } as never);
       }
     }
+    this.#renderCandleData(this.#priceCandles);
   }
 
   /**
@@ -359,9 +360,21 @@ export class ChartController {
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
     const last = this.#priceCandles.at(-1);
-    if (last?.time === candle.time) this.#priceCandles[this.#priceCandles.length - 1] = candle;
+    const replacesLast = last?.time === candle.time;
+    if (replacesLast) this.#priceCandles[this.#priceCandles.length - 1] = candle;
     else this.#priceCandles.push(candle);
-    this.#renderCandleData(this.#priceCandles);
+    const priceSeries = this.#series.require<'Candlestick'>(PRICE_SERIES_ID);
+    const reference = toReferenceCandlestickData(candle);
+    if (this.#candleDisplayMode === 'opening') {
+      priceSeries.update(toCandlestickData(candle));
+    } else if (this.#candleDisplayMode === 'reference') {
+      if (reference !== null) priceSeries.update(reference);
+      else if (replacesLast) priceSeries.setData(toReferenceCandlestickDataList(this.#priceCandles));
+    } else {
+      priceSeries.update(toOpeningOutlineCandlestickData(candle));
+      if (reference !== null) this.#referenceSeries?.update(reference);
+      else if (replacesLast) this.#referenceSeries?.setData(toReferenceCandlestickDataList(this.#priceCandles));
+    }
     this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).update(toLineData(candle));
     this.#updatePriceScaleWidth();
   }
