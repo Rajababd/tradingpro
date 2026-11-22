@@ -43,9 +43,9 @@ describe('ChartController managers', () => {
     expect(() => controller.viewport).toThrow(/not mounted/);
   });
 
-  it('creates exactly one price series at mount and protects it from removal', () => {
+  it('creates the managed price series plus the internal reference overlay and protects the base series', () => {
     controller.mount(container);
-    expect(fake.addSeries).toHaveBeenCalledTimes(4);
+    expect(fake.addSeries).toHaveBeenCalledTimes(3);
     expect(() => controller.visibility.removeSeries('price')).toThrow(/protected/);
   });
 
@@ -65,7 +65,7 @@ describe('ChartController managers', () => {
     controller.mount(container); // idempotent
     controller.visibility.addSeries({ id: 'rsi', definition: def('Line'), paneId: 'rsi' });
     expect(fake.paneGroups).toHaveLength(2);
-    expect(fake.addSeries).toHaveBeenCalledTimes(3);
+    expect(fake.addSeries).toHaveBeenCalledTimes(4);
   });
 
   it('dispose detaches crosshair and viewport subscriptions before removing the chart', () => {

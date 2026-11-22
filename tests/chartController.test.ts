@@ -93,13 +93,16 @@ describe('ChartController', () => {
     const c = new ChartController(theme);
     c.mount(document.createElement('div'));
     c.setCandles([candle(100, 11), candle(200, 12)]);
-    expect(mocks.series.setData).toHaveBeenCalledWith([
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(1, [
       { time: 100, open: 10, high: 12, low: 9, close: 11 },
       { time: 200, open: 10, high: 12, low: 9, close: 12 },
     ]);
-    expect(mocks.series.setData).toHaveBeenNthCalledWith(3, [
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(2, [
       { time: 100, open: 10.5, high: 12, low: 9, close: 11, borderColor: '#26a69a' },
       { time: 200, open: 10.5, high: 12, low: 9, close: 12, borderColor: '#26a69a' },
+    ]);
+    expect(mocks.series.setData).toHaveBeenNthCalledWith(3, [
+      { time: 100, value: 11 }, { time: 200, value: 12 },
     ]);
     expect(mocks.timeScale.fitContent).toHaveBeenCalledTimes(1);
   });
