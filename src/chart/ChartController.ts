@@ -295,7 +295,11 @@ export class ChartController {
   setCandleDisplayMode(mode: CandleDisplayMode): void {
     if (mode !== 'opening' && mode !== 'reference' && mode !== 'both') throw new Error('Unsupported candle display mode.');
     if (mode === this.#candleDisplayMode) return;
+    const previousMode = this.#candleDisplayMode;
     this.#candleDisplayMode = mode;
+    if (previousMode === 'both' && mode !== 'both') {
+      this.#series?.get<'Candlestick'>(PRICE_SERIES_ID)?.applyOptions({ upColor: this.theme.up, downColor: this.theme.down } as never);
+    }
     if (this.#priceCandles.length > 0) this.#renderCandleData(this.#priceCandles);
   }
 
@@ -304,7 +308,7 @@ export class ChartController {
     const base = this.#series.require<'Candlestick'>(PRICE_SERIES_ID);
     const references = toReferenceCandlestickDataList(candles);
     if (this.#candleDisplayMode === 'opening') {
-      base.applyOptions({ upColor: this.theme.up, downColor: this.theme.down, wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: false, zOrder: 'normal' } as never);
+      base.applyOptions({ wickVisible: true, borderVisible: false, zOrder: 'normal' } as never);
       base.setData(candles.map(toCandlestickData));
       this.#referenceSeries?.setData([]);
       this.#referenceSeries?.applyOptions({ visible: false } as never);
@@ -316,7 +320,7 @@ export class ChartController {
       this.#referenceSeries?.setData([]);
       return;
     }
-    base.applyOptions({ upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: true, zOrder: 'top' } as never);
+    base.applyOptions({ upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', wickVisible: true, borderVisible: true, zOrder: 'top' } as never);
     base.setData(candles.map(toOpeningOutlineCandlestickData));
     this.#referenceSeries?.setData(references);
     this.#referenceSeries?.applyOptions({ visible: this.#priceChartType === 'candles' } as never);
