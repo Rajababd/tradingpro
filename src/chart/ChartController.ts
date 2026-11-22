@@ -48,8 +48,9 @@ export const getAdjustedReferencePrice = (c: Candle): number | null => {
   return candleDate < '2026-01-04' ? referencePrice / 100 : referencePrice;
 };
 
-/** Reference-open overlay. H/L are expanded only when required by the chart's OHLC invariant;
- * the overlay wick is hidden, while the base series remains the source of natural HLC values. */
+export type CandleDisplayMode = 'opening' | 'reference' | 'both';
+
+/** Reference-price candles use the adjusted reference as their open and retain natural H/L/C. */
 export const toReferenceCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> | null => {
   const referencePrice = getAdjustedReferencePrice(c);
   if (referencePrice === null) return null;
@@ -62,6 +63,16 @@ export const toReferenceCandlestickData = (c: Candle): CandlestickData<UTCTimest
     borderColor: c.close > referencePrice ? '#26a69a' : c.close < referencePrice ? '#ef5350' : '#f2c14e',
   };
 };
+
+/** Opening-price candles in combined mode: transparent body with direction-colored outline. */
+const toOpeningOutlineCandlestickData = (c: Candle): CandlestickData<UTCTimestamp> => ({
+  time: c.time as number as UTCTimestamp,
+  open: c.open,
+  high: c.high,
+  low: c.low,
+  close: c.close,
+  borderColor: c.close > c.open ? '#26a69a' : c.close < c.open ? '#ef5350' : '#f2c14e',
+});
 
 const toReferenceCandlestickDataList = (candles: readonly Candle[]) => candles.flatMap((candle) => {
   const item = toReferenceCandlestickData(candle);
@@ -93,6 +104,7 @@ export class ChartController {
   #priceScaleWidth = 64;
   #priceCandles: Candle[] = [];
   #priceChartType: 'candles' | 'line' = 'candles';
+  #candleDisplayMode: CandleDisplayMode = 'both';
   #verticalPinch: { distance: number; range: { from: number; to: number }; focalPrice: number; focalRatio: number } | null = null;
 
   /** Current minimum width reserved for right-axis labels. */
@@ -225,9 +237,10 @@ export class ChartController {
       });
       visibility.addSeries({ id: PRICE_LINE_SERIES_ID, definition: LineSeries, options: { color: '#5aa9e6', lineWidth: 2, priceLineVisible: false, visible: false }, paneId: PRICE_PANE_ID, visible: false });
       this.#referenceSeries = chart.addSeries(CandlestickSeries, {
-        upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)',
-        wickVisible: false, borderVisible: true, borderUpColor: '#26a69a', borderDownColor: '#ef5350',
-        priceLineVisible: false, lastValueVisible: false, priceScaleId: 'right', zOrder: 'top',
+        upColor: t.up, downColor: t.down,
+        wickUpColor: t.up, wickDownColor: t.down,
+        wickVisible: true, borderVisible: false,
+        priceLineVisible: false, lastValueVisible: false, priceScaleId: 'right', zOrder: 'normal',
       } as never, PRICE_PANE_INDEX);
       panes.noteSeriesAdded(PRICE_PANE_ID); // keep pane bookkeeping aligned with the internal overlay series
       this.#visibility = visibility;
@@ -275,6 +288,37 @@ export class ChartController {
 
   get priceChartType(): 'candles' | 'line' { return this.#priceChartType; }
 
+  get candleDisplayMode(): CandleDisplayMode { return this.#candleDisplayMode; }
+
+  /** Select opening-price candles, reference-price candles, or both visual layers. */
+  setCandleDisplayMode(mode: CandleDisplayMode): void {
+    if (mode !== 'opening' && mode !== 'reference' && mode !== 'both') throw new Error('Unsupported candle display mode.');
+    if (mode === this.#candleDisplayMode) return;
+    this.#candleDisplayMode = mode;
+    if (this.#priceCandles.length > 0) this.#renderCandleData(this.#priceCandles);
+  }
+
+  #renderCandleData(candles: readonly Candle[]): void {
+    if (this.#series === null) return;
+    const base = this.#series.require<'Candlestick'>(PRICE_SERIES_ID);
+    const references = toReferenceCandlestickDataList(candles);
+    if (this.#candleDisplayMode === 'opening') {
+      base.applyOptions({ upColor: this.theme.up, downColor: this.theme.down, wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: false, zOrder: 'normal' } as never);
+      base.setData(candles.map(toCandlestickData));
+      this.#referenceSeries?.setData([]);
+      return;
+    }
+    if (this.#candleDisplayMode === 'reference') {
+      base.applyOptions({ upColor: this.theme.up, downColor: this.theme.down, wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: false, zOrder: 'normal' } as never);
+      base.setData(references);
+      this.#referenceSeries?.setData([]);
+      return;
+    }
+    base.applyOptions({ upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', wickUpColor: this.theme.up, wickDownColor: this.theme.down, wickVisible: true, borderVisible: true, zOrder: 'top' } as never);
+    base.setData(candles.map(toOpeningOutlineCandlestickData));
+    this.#referenceSeries?.setData(references);
+  }
+
   /** Restore all series styling to application defaults without changing data or visibility. */
   resetAppearance(): void {
     if (this.#series === null) return;
@@ -300,8 +344,7 @@ export class ChartController {
       throw new Error('ChartController is not mounted.');
     }
     this.#priceCandles = [...candles];
-    this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(candles.map(toCandlestickData));
-    this.#referenceSeries?.setData(toReferenceCandlestickDataList(candles));
+    this.#renderCandleData(candles);
     this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).setData(candles.map(toLineData));
     this.#drawings.rebaseLogicalAnchors();
     this.#viewport.fitContent();
@@ -315,14 +358,11 @@ export class ChartController {
    */
   updateCandle(candle: Candle): void {
     if (this.#series === null) throw new Error('ChartController is not mounted.');
-    this.#series.require<'Candlestick'>(PRICE_SERIES_ID).update(toCandlestickData(candle));
-    const overlay = toReferenceCandlestickData(candle);
-    if (overlay !== null) this.#referenceSeries?.update(overlay);
-    else if (this.#priceCandles.at(-1)?.time === candle.time) this.#referenceSeries?.setData(toReferenceCandlestickDataList([...this.#priceCandles.slice(0, -1), candle]));
-    this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).update(toLineData(candle));
     const last = this.#priceCandles.at(-1);
     if (last?.time === candle.time) this.#priceCandles[this.#priceCandles.length - 1] = candle;
     else this.#priceCandles.push(candle);
+    this.#renderCandleData(this.#priceCandles);
+    this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).update(toLineData(candle));
     this.#updatePriceScaleWidth();
   }
 
@@ -336,8 +376,7 @@ export class ChartController {
     if (this.#series === null || this.#viewport === null || this.#drawings === null) throw new Error('ChartController is not mounted.');
     const range = this.#viewport.getLogicalRange();
     this.#priceCandles = [...all];
-    this.#series.require<'Candlestick'>(PRICE_SERIES_ID).setData(all.map(toCandlestickData));
-    this.#referenceSeries?.setData(toReferenceCandlestickDataList(all));
+    this.#renderCandleData(all);
     this.#series.require<'Line'>(PRICE_LINE_SERIES_ID).setData(all.map(toLineData));
     this.#drawings.rebaseLogicalAnchors();
     if (range !== null && added > 0) {
